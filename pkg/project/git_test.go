@@ -26,9 +26,12 @@ func TestGit_Detect(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, detected)
-	assert.Equal(t, "wakatime-cli", result.Project)
-	assert.Equal(t, "master", result.Branch)
 	assert.Contains(t, result.Folder, fp)
+	assert.Equal(t, project.Result{
+		Project: "wakatime-cli",
+		Branch:  "master",
+		Folder:  result.Folder,
+	}, result)
 }
 
 func TestGit_Detect_BranchWithSlash(t *testing.T) {
