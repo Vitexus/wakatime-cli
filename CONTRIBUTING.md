@@ -6,14 +6,12 @@ To contribute to this project please carefully read this document.
 
 `wakatime-cli` is written in [Go](https://golang.org/).
 
-**Note:** wakatime-cli uses [Go Modules](https://github.com/golang/go/wiki/Modules) to manage dependencies.
-
 Prerequisites:
 
-- `make` - We use make to build and run tests.
+- We use `make` to build and run tests.
 - [Go 1.16](https://golang.org/doc/install)
 
-After cloning it first run `make test` to make sure everything is properly set.
+After cloning, install dependencies with `make install`.
 
 ## Branches
 
@@ -24,7 +22,7 @@ This project currently has two branches
 
 ## Testing and Linting
 
-Before any commit make sure to always run `make lint` and `make test` consecutively. It guarantees there's no linting error and all tests pass.
+Run `make test-all` before creating any pull requests, or your PR won’t pass the automated checks.
 
 ## Branching Stratgegy
 
@@ -48,6 +46,6 @@ Please follow our guideline for branch names [here](https://github.com/wakatime/
   - If your pull request fixes an issue in the issue tracker, use the [closes/fixes/resolves syntax](https://help.github.com/articles/closing-issues-via-commit-messages) in the body to indicate this.
   - See <http://chris.beams.io/posts/git-commit> for more tips on writing good commit messages.
 - Pull request title and description should follow the same guidelines as commit messages.
-- Rebasing pull requests is OK and encouraged. After submitting your pull request some changes may be requested. Rather than adding unnecessary extra commits to the pull request, you can squash these changes into the existing commit and then do a force push to your fork. When you do a force push to your fork, the PR will be updated with your new changes, so there is no need to open a new PR to make changes. Leave a comment on the pull request thread to explain that the history has been changed. This will help to keep the commit history of the repository clean.
+- Rebasing pull requests is OK and encouraged. After submitting your pull request some changes may be requested. Prefer using [git fixup](https://git-scm.com/docs/git-commit#Documentation/git-commit.txt---fixupltcommitgt) rather than adding orphan extra commits to the pull request, then do a push to your fork. As soon as your PR gets approved one of us will merge it by rebasing and squashing any residuary commits that were pushed while reviewing. This will help to keep the commit history of the repository clean.
 
 Any question join us on [Slack](https://wakaslack.herokuapp.com/).
