@@ -25,7 +25,7 @@ func TestClient_Summaries(t *testing.T) {
 
 	var numCalls int
 
-	router.HandleFunc("/v1/users/current/summaries", func(w http.ResponseWriter, req *http.Request) {
+	router.HandleFunc("/users/current/summaries", func(w http.ResponseWriter, req *http.Request) {
 		numCalls++
 
 		// check request
@@ -49,7 +49,7 @@ func TestClient_Summaries(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	c := api.NewClient(u, http.DefaultClient)
+	c := api.NewClient(u)
 	summaries, err := c.Summaries(
 		time.Date(2020, time.April, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(2020, time.April, 2, 0, 0, 0, 0, time.UTC),
@@ -76,7 +76,7 @@ func TestClient_SummariesByCategory(t *testing.T) {
 
 	var numCalls int
 
-	router.HandleFunc("/v1/users/current/summaries", func(w http.ResponseWriter, req *http.Request) {
+	router.HandleFunc("/users/current/summaries", func(w http.ResponseWriter, req *http.Request) {
 		numCalls++
 
 		f, err := os.Open("testdata/api_summaries_by_category_response.json")
@@ -87,7 +87,7 @@ func TestClient_SummariesByCategory(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	c := api.NewClient(u, http.DefaultClient)
+	c := api.NewClient(u)
 	summaries, err := c.Summaries(
 		time.Date(2020, time.April, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(2020, time.April, 2, 0, 0, 0, 0, time.UTC),
@@ -132,13 +132,13 @@ func TestClient_SummariesWithTimeout(t *testing.T) {
 	called := make(chan struct{})
 	defer close(called)
 
-	router.HandleFunc("/v1/users/current/summaries", func(w http.ResponseWriter, req *http.Request) {
+	router.HandleFunc("/users/current/summaries", func(w http.ResponseWriter, req *http.Request) {
 		<-block
 		called <- struct{}{}
 	})
 
 	opts := []api.Option{api.WithTimeout(20 * time.Millisecond)}
-	c := api.NewClient(u, http.DefaultClient, opts...)
+	c := api.NewClient(u, opts...)
 	_, err := c.Summaries(
 		time.Date(2020, time.April, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(2020, time.April, 2, 0, 0, 0, 0, time.UTC),
@@ -163,12 +163,12 @@ func TestClient_Summaries_Err(t *testing.T) {
 
 	var numCalls int
 
-	router.HandleFunc("/v1/users/current/summaries", func(w http.ResponseWriter, req *http.Request) {
+	router.HandleFunc("/users/current/summaries", func(w http.ResponseWriter, req *http.Request) {
 		numCalls++
 		w.WriteHeader(http.StatusInternalServerError)
 	})
 
-	c := api.NewClient(u, http.DefaultClient)
+	c := api.NewClient(u)
 	_, err := c.Summaries(
 		time.Date(2020, time.April, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(2020, time.April, 2, 0, 0, 0, 0, time.UTC),
@@ -186,12 +186,12 @@ func TestClient_Summaries_ErrAuth(t *testing.T) {
 
 	var numCalls int
 
-	router.HandleFunc("/v1/users/current/summaries", func(w http.ResponseWriter, req *http.Request) {
+	router.HandleFunc("/users/current/summaries", func(w http.ResponseWriter, req *http.Request) {
 		numCalls++
 		w.WriteHeader(http.StatusUnauthorized)
 	})
 
-	c := api.NewClient(u, http.DefaultClient)
+	c := api.NewClient(u)
 	_, err := c.Summaries(
 		time.Date(2020, time.April, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(2020, time.April, 2, 0, 0, 0, 0, time.UTC),
@@ -204,7 +204,7 @@ func TestClient_Summaries_ErrAuth(t *testing.T) {
 }
 
 func TestClient_Summaries_ErrRequest(t *testing.T) {
-	c := api.NewClient("invalid-url", http.DefaultClient)
+	c := api.NewClient("invalid-url")
 	_, err := c.Summaries(
 		time.Date(2020, time.April, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(2020, time.April, 2, 0, 0, 0, 0, time.UTC),

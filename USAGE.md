@@ -1,6 +1,13 @@
-# Configuring
+# Usage
 
-Here's an example config file with all available options:
+Options can be passed to wakatime-cli via command line, or set in the `$WAKATIME_HOME/.wakatime.cfg` config file.
+`$WAKATIME_HOME` defaults to your user's `$HOME` directory.
+Command line arguments take precedence over config file settings.
+Run `wakatime-cli --help` for available command line options.
+
+## INI Config File
+
+Here's an example `$WAKATIME_HOME/.wakatime.cfg` config file with all available options:
 
 ```ini
 [settings]
@@ -27,6 +34,7 @@ no_ssl_verify = false
 ssl_certs_file =
 timeout = 30
 hostname = machinename
+log_file = 
 [projectmap]
 projects/foo = new project name
 ^/home/user/projects/bar(\d+)/ = project{0}
@@ -34,7 +42,7 @@ projects/foo = new project name
 submodules_disabled = false
 ```
 
-## Settings Section
+### Settings Section
 
 | option                         | description | allowed values |
 | ---                            | ---         | ---            |
@@ -56,8 +64,9 @@ submodules_disabled = false
 | ssl_certs_file                 | Override the bundled CA certs file. By default, uses system ca certs. | _filepath_ |
 | timeout                        | Number of seconds to wait when sending heartbeats to api. Defaults to 60 seconds. | _integer_ |
 | hostname                       | Optional name of local machine. Defaults to local machine name read from system. | _machinename_ |
+| log_file                       | Optional log file path. Defaults to `~/.wakatime.log`. | _filepath_ |
 
-## Project Map Section
+### Project Map Section
 
 A key value pair list separated by new line.
 
@@ -67,10 +76,14 @@ projects/foo = new project name
 ^/home/user/projects/bar(\d+)/ = project{0}
 ```
 
-## Git Section
+### Git Section
 
 | option                         | description | allowed values |
 | ---                            | ---         | ---            |
 | submodules_disabled            | It will be matched against the submodule path and if matching, will skip it. | true;false;regex list |
 
 For commonly used configuration options, see examples in the [FAQ](https://wakatime.com/faq).
+
+### Internal Section
+
+This section is reserved for internal plugin configs, like caching GitHub API requests when checking for wakatime-cli updates.

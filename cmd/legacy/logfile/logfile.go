@@ -27,13 +27,12 @@ func LoadParams(v *viper.Viper) (Params, error) {
 		debug = b
 	}
 
-	logFile, _ := vipertools.FirstNonEmptyString(v, "log-file", "logfile", "settings.log_file")
-
-	if logFile != "" {
+	logFile, ok := vipertools.FirstNonEmptyString(v, "log-file", "logfile", "settings.log_file")
+	if ok {
 		p, err := homedir.Expand(logFile)
 		if err != nil {
 			return Params{},
-				ErrLogFile(fmt.Sprintf("failed expading log file: %s", err))
+				ErrLogFile(fmt.Sprintf("failed expanding log file: %s", err))
 		}
 
 		return Params{
