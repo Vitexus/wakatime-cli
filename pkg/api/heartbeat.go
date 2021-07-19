@@ -13,15 +13,15 @@ import (
 	"github.com/wakatime/wakatime-cli/pkg/log"
 )
 
-// Send sends a bulk of heartbeats to the wakatime api and returns the result.
+// SendHeartbeats sends a bulk of heartbeats to the wakatime api and returns the result.
 // The API does not guarantuee the setting of the Heartbeat property of the result.
 // On certain errors, like 429/too many heartbeats, this is omitted and not set.
 //
 // ErrRequest is returned upon request failure with no received response from api.
 // ErrAuth is returned upon receiving a 401 Unauthorized api response.
 // Err is returned on any other api response related error.
-func (c *Client) Send(heartbeats []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
-	url := c.baseURL + "/v1/users/current/heartbeats.bulk"
+func (c *Client) SendHeartbeats(heartbeats []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+	url := c.baseURL + "/users/current/heartbeats.bulk"
 
 	log.Debugf("sending %d heartbeat(s) to api at %s", len(heartbeats), url)
 
@@ -29,6 +29,8 @@ func (c *Client) Send(heartbeats []heartbeat.Heartbeat) ([]heartbeat.Result, err
 	if err != nil {
 		return nil, fmt.Errorf("failed to json encode body: %s", err)
 	}
+
+	log.Debugf("heartbeats: %s", string(data))
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(data))
 	if err != nil {
@@ -110,7 +112,7 @@ func parseHeartbeatResponse(data []json.RawMessage) (heartbeat.Result, error) {
 		return heartbeat.Result{}, fmt.Errorf("failed to parse json status: %s", err)
 	}
 
-	if result.Status == http.StatusBadRequest {
+	if result.Status >= http.StatusBadRequest {
 		resultErrors, err := parseHeartbeatResponseError(data[0])
 		if err != nil {
 			return heartbeat.Result{}, fmt.Errorf("failed to parse result errors: %s", err)
@@ -137,8 +139,8 @@ func parseHeartbeatResponseError(data json.RawMessage) ([]string, error) {
 	var errs []string
 
 	type responseBodyErr struct {
-		Error  *string              `json:"error"`
-		Errors *map[string][]string `json:"errors"`
+		Error  *string                 `json:"error"`
+		Errors *map[string]interface{} `json:"errors"`
 	}
 
 	// 1. try "error" key
@@ -146,7 +148,7 @@ func parseHeartbeatResponseError(data json.RawMessage) ([]string, error) {
 
 	err := json.Unmarshal(data, &responseBodyErr{Error: &resultError})
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse json heartbeat error: %s", err)
+		log.Debugf("failed to parse json heartbeat error or 'error' key not found: %s", err)
 	}
 
 	if resultError != "" {
@@ -155,11 +157,11 @@ func parseHeartbeatResponseError(data json.RawMessage) ([]string, error) {
 	}
 
 	// 2. try "errors" key
-	var resultErrors map[string][]string
+	var resultErrors map[string]interface{}
 
 	err = json.Unmarshal(data, &responseBodyErr{Errors: &resultErrors})
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse json heartbeat errors: %s", err)
+		log.Debugf("failed to parse json heartbeat errors or 'errors' key not found: %s", err)
 	}
 
 	if resultErrors == nil {
@@ -167,10 +169,21 @@ func parseHeartbeatResponseError(data json.RawMessage) ([]string, error) {
 	}
 
 	for field, messages := range resultErrors {
+		// skipping parsing dependencies errors as it won't happen because we are
+		// filtering in the cli.
+		if field == "dependencies" {
+			continue
+		}
+
+		m := make([]string, len(messages.([]interface{})))
+		for i, v := range messages.([]interface{}) {
+			m[i] = fmt.Sprint(v)
+		}
+
 		errs = append(errs, fmt.Sprintf(
 			"%s: %s",
 			field,
-			strings.Join(messages, " "),
+			strings.Join(m, " "),
 		))
 	}
 

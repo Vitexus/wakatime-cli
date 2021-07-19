@@ -23,7 +23,7 @@ func TestClient_Goal(t *testing.T) {
 	var numCalls int
 
 	router.HandleFunc(
-		"/v1/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, req *http.Request) {
+		"/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, req *http.Request) {
 			numCalls++
 
 			// check request
@@ -39,7 +39,7 @@ func TestClient_Goal(t *testing.T) {
 			require.NoError(t, err)
 		})
 
-	c := api.NewClient(u, http.DefaultClient)
+	c := api.NewClient(u)
 	goal, err := c.Goal("00000000-0000-4000-8000-000000000000")
 
 	require.NoError(t, err)
@@ -59,13 +59,13 @@ func TestClient_GoalWithTimeout(t *testing.T) {
 	defer close(called)
 
 	router.HandleFunc(
-		"/v1/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, req *http.Request) {
+		"/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, req *http.Request) {
 			<-block
 			called <- struct{}{}
 		})
 
 	opts := []api.Option{api.WithTimeout(20 * time.Millisecond)}
-	c := api.NewClient(u, http.DefaultClient, opts...)
+	c := api.NewClient(u, opts...)
 	_, err := c.Goal("00000000-0000-4000-8000-000000000000")
 	require.Error(t, err)
 
@@ -88,12 +88,12 @@ func TestClient_Goal_Err(t *testing.T) {
 	var numCalls int
 
 	router.HandleFunc(
-		"/v1/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, req *http.Request) {
+		"/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, req *http.Request) {
 			numCalls++
 			w.WriteHeader(http.StatusInternalServerError)
 		})
 
-	c := api.NewClient(u, http.DefaultClient)
+	c := api.NewClient(u)
 	_, err := c.Goal("00000000-0000-4000-8000-000000000000")
 
 	var apierr api.Err
@@ -109,12 +109,12 @@ func TestClient_Goal_ErrAuth(t *testing.T) {
 	var numCalls int
 
 	router.HandleFunc(
-		"/v1/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, req *http.Request) {
+		"/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, req *http.Request) {
 			numCalls++
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 
-	c := api.NewClient(u, http.DefaultClient)
+	c := api.NewClient(u)
 	_, err := c.Goal("00000000-0000-4000-8000-000000000000")
 
 	var autherr api.ErrAuth
@@ -124,7 +124,7 @@ func TestClient_Goal_ErrAuth(t *testing.T) {
 }
 
 func TestClient_Goal_ErrRequest(t *testing.T) {
-	c := api.NewClient("invalid-url", http.DefaultClient)
+	c := api.NewClient("invalid-url")
 	_, err := c.Goal("00000000-0000-4000-8000-000000000000")
 
 	var reqerr api.ErrRequest
