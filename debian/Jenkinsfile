@@ -3,12 +3,12 @@
 // Current version of this Pipeline https://github.com/VitexSoftware/BuildImages/blob/main/Test/Jenkinsfile
 
 String[] distributions = [
-			'debian:bookworm',
+			// 'debian:bookworm',: // invalid go version '1.26.5': must match format 1.23
 			'debian:trixie',
-			// 'debian:forky', // Disabled: Forky is still unstable/research-only.
+			'debian:forky', 
 			//                 // The full Debian package ecosystem is not yet available for Forky.
 			//                 // Re-enable once the stack builds cleanly for Forky.
-			'ubuntu:jammy',
+			//'ubuntu:jammy',  // invalid go version '1.26.5': must match format 1.23
 			'ubuntu:noble',
 			'ubuntu:resolute',
 ]
