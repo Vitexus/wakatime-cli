@@ -1,7 +1,6 @@
 package project_test
 
 import (
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,14 +15,13 @@ import (
 func TestSubversion_Detect(t *testing.T) {
 	skipIfBinaryNotFound(t)
 
-	fp, tearDown := setupTestSvn(t)
-	defer tearDown()
+	fp := setupTestSvn(t)
 
 	s := project.Subversion{
 		Filepath: filepath.Join(fp, "wakatime-cli", "src", "pkg", "file.go"),
 	}
 
-	result, detected, err := s.Detect()
+	result, detected, err := s.Detect(t.Context())
 	require.NoError(t, err)
 
 	assert.True(t, detected)
@@ -37,14 +35,13 @@ func TestSubversion_Detect(t *testing.T) {
 func TestSubversion_Detect_Branch(t *testing.T) {
 	skipIfBinaryNotFound(t)
 
-	fp, tearDown := setupTestSvnBranch(t)
-	defer tearDown()
+	fp := setupTestSvnBranch(t)
 
 	s := project.Subversion{
 		Filepath: filepath.Join(fp, "wakatime-cli/src/pkg/file.go"),
 	}
 
-	result, detected, err := s.Detect()
+	result, detected, err := s.Detect(t.Context())
 	require.NoError(t, err)
 
 	assert.True(t, detected)
@@ -55,11 +52,16 @@ func TestSubversion_Detect_Branch(t *testing.T) {
 	}, result)
 }
 
-func setupTestSvn(t *testing.T) (fp string, tearDown func()) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime-svn")
-	require.NoError(t, err)
+func TestSubversion_ID(t *testing.T) {
+	s := project.Subversion{}
 
-	err = os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
+	assert.Equal(t, project.SubversionDetector, s.ID())
+}
+
+func setupTestSvn(t *testing.T) (fp string) {
+	tmpDir := t.TempDir()
+
+	err := os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
 	require.NoError(t, err)
 
 	tmpFile, err := os.Create(filepath.Join(tmpDir, "wakatime-cli/src/pkg/file.go"))
@@ -69,14 +71,13 @@ func setupTestSvn(t *testing.T) (fp string, tearDown func()) {
 
 	copyDir(t, "testdata/svn", filepath.Join(tmpDir, "wakatime-cli/.svn"))
 
-	return tmpDir, func() { os.RemoveAll(tmpDir) }
+	return tmpDir
 }
 
-func setupTestSvnBranch(t *testing.T) (fp string, tearDown func()) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime-svn")
-	require.NoError(t, err)
+func setupTestSvnBranch(t *testing.T) (fp string) {
+	tmpDir := t.TempDir()
 
-	err = os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
+	err := os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
 	require.NoError(t, err)
 
 	tmpFile, err := os.Create(filepath.Join(tmpDir, "wakatime-cli/src/pkg/file.go"))
@@ -86,7 +87,7 @@ func setupTestSvnBranch(t *testing.T) (fp string, tearDown func()) {
 
 	copyDir(t, "testdata/svn_branch", filepath.Join(tmpDir, "wakatime-cli/.svn"))
 
-	return tmpDir, func() { os.RemoveAll(tmpDir) }
+	return tmpDir
 }
 
 func copyDir(t *testing.T, src string, dst string) {
@@ -112,7 +113,7 @@ func copyDir(t *testing.T, src string, dst string) {
 	err = os.MkdirAll(dst, si.Mode())
 	require.NoError(t, err)
 
-	entries, err := ioutil.ReadDir(src)
+	entries, err := os.ReadDir(src)
 	require.NoError(t, err)
 
 	for _, entry := range entries {
@@ -123,7 +124,10 @@ func copyDir(t *testing.T, src string, dst string) {
 			copyDir(t, srcPath, dstPath)
 		} else {
 			// Skip symlinks.
-			if entry.Mode()&os.ModeSymlink != 0 {
+			info, err := entry.Info()
+			require.NoError(t, err)
+
+			if info.Mode()&os.ModeSymlink != 0 {
 				continue
 			}
 

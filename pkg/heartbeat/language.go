@@ -1,7 +1,81 @@
+// language.go contains programming language definitions and mappings.
+// To override the priority of languages when multiple languages map to the same
+// string, use the corresponding priority map defined in language_gen.go.
+//
+// priority:
+// 1. LanguageTransactSQL -> languageTSQLStr
+// 2. LanguageGo -> languageGoStr
+// 3. LanguageSYSTEMD -> languageSYSTEMDStr
+// 4. LanguageApacheConfig -> languageApacheConfigStr
+// 5. LanguageBatchfile -> languageBatchfileStr
+// 6. LanguageBatchfile -> languageBatchScriptStr
+// 7. LanguageClassicASP -> languageClassicASPStr
+// 8. LanguageClassicASP -> languageASPClassicStr
+// 9. LanguageDesktopFile -> languageDesktopFileStr
+// 10. LanguageFStar -> languageFStarStr
+// 11. LanguageSalt -> languageSaltStr
+// 12. LanguageSalt -> languageSaltStackStr
+// 13. LanguageMaterializeSQLDialect -> languageMaterializeSQLDialectStr
+// 14. LanguageMaterializeSQLDialect -> languageMzqlStr
+// 15. LanguageVBNet -> languageVBNetStr
+// 16. LanguageVBNet -> languageVisualBasicNetStr
+//
+// chromaPriority: (chroma lexer name -> Language constant)
+// These override the default Chroma lexer to Language mapping.
+// 1. Ampl -> LanguageAMPL
+// 2. ApacheConf -> LanguageApacheConfig
+// 3. ArangoDB AQL -> LanguageArangoDBQueryLanguage
+// 4. c-objdump -> LanguageCObjdump
+// 5. Coldfusion CFC -> LanguageColdfusionCFC
+// 6. Coldfusion HTML -> LanguageColdfusionHTML
+// 7. cpp-objdump -> LanguageCppObjdump
+// 8. CUDA -> LanguageCUDA
+// 9. dns -> LanguageDNSZone
+// 10. EmacsLisp -> LanguageEmacsLisp
+// 11. FSharp -> LanguageFSharp
+// 12. GAS -> LanguageAssembly
+// 13. Go HTML Template -> LanguageGo
+// 14. Go Text Template -> LanguageGo
+// 15. Hxml -> LanguageHxml
+// 16. JSON-LD -> LanguageJSONLD
+// 17. ISCdhcpd -> LanguageISCdhcpd
+// 18. LessCss -> LanguageLess
+// 19. liquid -> LanguageLiquid
+// 20. markdown -> LanguageMarkdown
+// 21. NewLisp -> LanguageNewLisp
+// 22. Nim -> LanguageNimrod
+// 23. Ooc -> LanguageOoc
+// 24. Org Mode -> LanguageOrg
+// 25. plaintext -> LanguageText
+// 26. properties -> LanguageJavaProperties
+// 27. PSL -> LanguagePSL
+// 28. R -> LanguageS
+// 29. react -> LanguageJSX
+// 30. ReasonML -> LanguageReasonML
+// 31. REBOL -> LanguageREBOL
+// 32. Rexx -> LanguageRexx
+// 33. Sed -> LanguageSed
+// 34. stas -> LanguageStas
+// 35. SYSTEMD -> LanguageSYSTEMD
+// 36. systemverilog -> LanguageSystemVerilog
+// 37. Tal -> LanguageUxntal
+// 38. Transact-SQL -> LanguageTransactSQL
+// 39. TypoScriptCssData -> LanguageTypoScript
+// 40. TypoScriptHtmlData -> LanguageTypoScript
+// 41. VB.net -> LanguageVBNet
+// 42. verilog -> LanguageVerilog
+// 43. vue -> LanguageVueJS
+// 44. Web IDL -> LanguageWebIDL
+// 45. FStar -> LanguageFStar
+// 46. Protocol Buffer Text Format -> LanguageProtocolBuffer
+// 47. WebAssembly Text Format -> LanguageWebAssembly
+// 48. MDX -> LanguageMDX
+
 package heartbeat
 
+//go:generate go run language_gen.go
+
 import (
-	"fmt"
 	"strings"
 )
 
@@ -71,10 +145,14 @@ const (
 	LanguageApolloGuidanceComputer
 	// LanguageAppleScript represents the AppleScript programming language.
 	LanguageAppleScript
+	// LanguageArangoDBQueryLanguage represents the ArangoDB Query Language programming language.
+	LanguageArangoDBQueryLanguage
 	// LanguageArc represents the Arc programming language.
 	LanguageArc
 	// LanguageArduino represents the Arduino programming language.
 	LanguageArduino
+	// LanguageArmAsm represents the ArmAsm programming language.
+	LanguageArmAsm
 	// LanguageArrow represents the Arrow programming language.
 	LanguageArrow
 	// LanguageASCIIDoc represents the ASCIIDoc programming language.
@@ -87,14 +165,18 @@ const (
 	LanguageASPDotNet
 	// LanguageAspectJ represents the AspectJ programming language.
 	LanguageAspectJ
-	// LanguageAspxCSharp represents the CSharpAspx programming language.
+	// LanguageAspxCSharp represents the Aspx C# programming language.
 	LanguageAspxCSharp
-	// LanguageAspxVBNet represents the VBNetAspx programming language.
+	// LanguageAspxVBNet represents the Aspx VB.Net programming language.
 	LanguageAspxVBNet
 	// LanguageAssembly represents the Assembly programming language.
 	LanguageAssembly
+	// LanguageAstro represents the Astro programming language.
+	LanguageAstro
 	// LanguageAsymptote represents the Asymptote programming language.
 	LanguageAsymptote
+	// LanguageATL represents the ATL programming language.
+	LanguageATL
 	// LanguageATS represents the ATS programming language.
 	LanguageATS
 	// LanguageAugeas represents the Augeas programming language.
@@ -115,7 +197,7 @@ const (
 	LanguageBARE
 	// LanguageBash represents the Bash programming language.
 	LanguageBash
-	// LanguageBashSession represents the BashSession programming language.
+	// LanguageBashSession represents the Bash Session programming language.
 	LanguageBashSession
 	// LanguageBasic represents the Basic programming language.
 	LanguageBasic
@@ -133,6 +215,8 @@ const (
 	LanguageBefunge
 	// LanguageBibTeX represents the BibTeX programming language.
 	LanguageBibTeX
+	// LanguageBicep represents the Bicep programming language.
+	LanguageBicep
 	// LanguageBison represents the Bison programming language.
 	LanguageBison
 	// LanguageBitBake represents the BitBake programming language.
@@ -157,6 +241,8 @@ const (
 	LanguageBoo
 	// LanguageBoogie represents the Boogie programming language.
 	LanguageBoogie
+	// LanguageBQN represents the BQN programming language.
+	LanguageBQN
 	// LanguageBrainfuck represents the Brainfuck programming language.
 	LanguageBrainfuck
 	// LanguageBrightScript represents the BrightScript programming language.
@@ -173,6 +259,8 @@ const (
 	LanguageC
 	// LanguageC2hsHaskell represents the C2hsHaskell programming language.
 	LanguageC2hsHaskell
+	// LanguageC3 represents the C3 programming language.
+	LanguageC3
 	// LanguageCa65Assembler represents the ca65 assembler programming language.
 	LanguageCa65Assembler
 	// LanguageCabalConfig represents the CabalConfig programming language.
@@ -269,6 +357,8 @@ const (
 	LanguageCool
 	// LanguageCoq represents the Coq programming language.
 	LanguageCoq
+	// LanguageCore represents the Core programming language.
+	LanguageCore
 	// LanguageCPerl represents the CPerl programming language.
 	LanguageCPerl
 	// LanguageCPP represents the CPP programming language.
@@ -309,6 +399,8 @@ const (
 	LanguageCSV
 	// LanguageCUDA represents the CUDA programming language.
 	LanguageCUDA
+	// LanguageCUE represents the CUE programming language.
+	LanguageCUE
 	// LanguagecURLConfig represents the cURLConfig programming language.
 	LanguagecURLConfig
 	// LanguageCVS represents the CVS programming language.
@@ -333,6 +425,8 @@ const (
 	LanguageDataWeave
 	// LanguageDASM16 represents the DASM16 programming language.
 	LanguageDASM16
+	// LanguageDax represents the Dax programming language.
+	LanguageDax
 	// LanguageDCL represents the DCL programming language.
 	LanguageDCL
 	// LanguageDCPU16Asm represents the DCPU16Asm programming language.
@@ -341,8 +435,8 @@ const (
 	LanguageDebianControlFile
 	// LanguageDelphi represents the Delphi programming language.
 	LanguageDelphi
-	// LanguageDesktop represents the desktop programming language.
-	LanguageDesktop
+	// LanguageDesktopFile represents the Desktop file programming language.
+	LanguageDesktopFile
 	// LanguageDevicetree represents the Devicetree programming language.
 	LanguageDevicetree
 	// LanguageDG represents the DG programming language.
@@ -493,10 +587,10 @@ const (
 	LanguageFoxPro
 	// LanguageFreefem represents the Freefem programming language.
 	LanguageFreefem
-	// LangauageFreeMarker represents the FreeMarker programming language.
-	LangauageFreeMarker
-	// LangauageFrege represents the Frege programming language.
-	LangauageFrege
+	// LanguageFreeMarker represents the FreeMarker programming language.
+	LanguageFreeMarker
+	// LanguageFrege represents the Frege programming language.
+	LanguageFrege
 	// LanguageFStar represents the F* programming language.
 	LanguageFStar
 	// LanguageFuthark represents the Futhark programming language.
@@ -521,8 +615,12 @@ const (
 	LanguageGDNative
 	// LanguageGDScript represents the GDScript programming language.
 	LanguageGDScript
+	// LanguageGDScript3 represents the GDScript3 programming language.
+	LanguageGDScript3
 	// LanguageGEDCOM represents the GEDCOM programming language.
 	LanguageGEDCOM
+	// LanguageGemtext represents the Gemtext programming language.
+	LanguageGemtext
 	// LanguageGenie represents the Genie programming language.
 	LanguageGenie
 	// LanguageGenshi represents the Genshi programming language.
@@ -547,6 +645,8 @@ const (
 	LanguageGitAttributes
 	// LanguageGitConfig represents the Git Config programming language.
 	LanguageGitConfig
+	// LanguageGleam represents the Gleam programming language.
+	LanguageGleam
 	// LanguageGLSL represents the GLSL programming language.
 	LanguageGLSL
 	// LanguageGlyph represents the Glyph programming language.
@@ -563,6 +663,8 @@ const (
 	LanguageGoHTMLTemplate
 	// LanguageGoTextTemplate represents the Go Text Template programming language.
 	LanguageGoTextTemplate
+	// LanguageGoTemplate represents the Go Template programming language.
+	LanguageGoTemplate
 	// LanguageGolo represents the Golo programming language.
 	LanguageGolo
 	// LanguageGoodDataCL represents the GoodData-CL programming language.
@@ -601,6 +703,8 @@ const (
 	LanguageHAProxy
 	// LanguageHarbour represents the Harbour programming language.
 	LanguageHarbour
+	// LanguageHare represents the Hare programming language.
+	LanguageHare
 	// LanguageHaskell represents the Haskell programming language.
 	LanguageHaskell
 	// LanguageHaxe represents the Haxe programming language.
@@ -647,6 +751,8 @@ const (
 	LanguageHyPhy
 	// LanguageIcon represents the Icon programming language.
 	LanguageIcon
+	// LanguageIDA represents the IDA programming language.
+	LanguageIDA
 	// LanguageIDL represents the IDL programming language.
 	LanguageIDL
 	// LanguageIdris represents the Idris programming language.
@@ -683,17 +789,21 @@ const (
 	LanguageIsabelle
 	// LanguageIsabelleRoot represents the IsabelleRoot programming language.
 	LanguageIsabelleRoot
+	// LanguageISCdhcpd represents the ISC dhcpd programming language.
+	LanguageISCdhcpd
 	// LanguageJ represents the J programming language.
 	LanguageJ
-	// LanguageJAGS represents the JAGS programming language.
-	LanguageJAGS
 	// LanguageJade represents the Jade programming language.
 	LanguageJade
+	// LanguageJAGS represents the JAGS programming language.
+	LanguageJAGS
+	// LanguageJanet represents the Janet programming language.
+	LanguageJanet
 	// LanguageJasmin represents the Jasmin programming language.
 	LanguageJasmin
 	// LanguageJava represents the Java programming language.
 	LanguageJava
-	// LanguageJavaProperties represents the JavaProperties programming language.
+	// LanguageJavaProperties represents the Java Properties programming language.
 	LanguageJavaProperties
 	// LanguageJavaScript represents the JavaScript programming language.
 	LanguageJavaScript
@@ -715,6 +825,8 @@ const (
 	LanguageJSON
 	// LanguageJSON5 represents the JSON5 programming language.
 	LanguageJSON5
+	// LanguageJSONata represents the JSONata programming language.
+	LanguageJSONata
 	// LanguageJSONiq represents the JSONiq programming language.
 	LanguageJSONiq
 	// LanguageJSONLD represents the JSON-LD programming language.
@@ -735,15 +847,17 @@ const (
 	LanguageJungle
 	// LanguageJupyterNotebook represents the JupyterNotebook programming language.
 	LanguageJupyterNotebook
-	// LanguageJuttle represents the Juttle console programming language.
+	// LanguageJuttle represents the Juttle programming language.
 	LanguageJuttle
 	// LanguageKaitai represent the Kaitai programming language.
 	LanguageKaitai
-	// LanguageKal represents the Kal console programming language.
+	// LanguageKakoune represents the Kakoune programming language.
+	LanguageKakoune
+	// LanguageKal represents the Kal programming language.
 	LanguageKal
-	// LanguageKconfig represents the Kconfig console programming language.
+	// LanguageKconfig represents the Kconfig programming language.
 	LanguageKconfig
-	// LanguageKernelLog represents the Kernel log console programming language.
+	// LanguageKernelLog represents the Kernel Log programming language.
 	LanguageKernelLog
 	// LanguageKiCadLayout represent the KiCadLayout programming language.
 	LanguageKiCadLayout
@@ -753,7 +867,7 @@ const (
 	LanguageKiCadSchematic
 	// LanguageKit represent the Kit programming language.
 	LanguageKit
-	// LanguageKoka represents the Koka console programming language.
+	// LanguageKoka represents the Koka programming language.
 	LanguageKoka
 	// LanguageKotlin represents the Kotlin programming language.
 	LanguageKotlin
@@ -773,17 +887,19 @@ const (
 	LanguageLatte
 	// LanguageLean represents the Lean programming language.
 	LanguageLean
+	// LanguageLean4 represents the Lean4 programming language.
+	LanguageLean4
 	// LanguageLess represents the Less programming language.
 	LanguageLess
 	// LanguageLex represents the Lex programming language.
 	LanguageLex
 	// LanguageLFE represents the LFE programming language.
 	LanguageLFE
-	// LanguageLighttpd represents the Lighttpd configuration file programming language.
+	// LanguageLighttpd represents the Lighttpd programming language.
 	LanguageLighttpd
 	// LanguageLilyPond represents the LilyPond programming language.
 	LanguageLilyPond
-	// LanguageLimbo represents the Limbo configuration file programming language.
+	// LanguageLimbo represents the Limbo programming language.
 	LanguageLimbo
 	// LanguageLinkerScript represents the LinkerScript programming language.
 	LanguageLinkerScript
@@ -821,6 +937,8 @@ const (
 	LanguageLookML
 	// LanguageLoomScript represents the LoomScript programming language.
 	LanguageLoomScript
+	// LanguageLox represents the lox programming language.
+	LanguageLox
 	// LanguageLSL represents the LSL programming language.
 	LanguageLSL
 	// LanguageLTspiceSymbol represents the LTspiceSymbol programming language.
@@ -843,6 +961,8 @@ const (
 	LanguageMask
 	// LanguageMason represents the Mason programming language.
 	LanguageMason
+	// LanguageMaterializeSQLDialect represents the Materialize SQL dialect programming language.
+	LanguageMaterializeSQLDialect
 	// LanguageMathematica represents the Mathematica programming language.
 	LanguageMathematica
 	// LanguageMatlab represents the Matlab programming language.
@@ -853,10 +973,16 @@ const (
 	LanguageMax
 	// LanguageMaxMSP represents the MaxMSP programming language.
 	LanguageMaxMSP
+	// LanguageMCFunction represents the MCFunction programming language.
+	LanguageMCFunction
+	// LanguageMDX represents the MDX programming language.
+	LanguageMDX
 	// LanguageMeson represents the Meson programming language.
 	LanguageMeson
 	// LanguageMetafont represents the Metafont programming language.
 	LanguageMetafont
+	// LanguageMetal represents the Metal programming language.
+	LanguageMetal
 	// LanguageMetapost represents the Metapost programming language.
 	LanguageMetapost
 	// LanguageMIME represents the MIME programming language.
@@ -877,6 +1003,8 @@ const (
 	LanguageModula2
 	// LanguageMoinWiki represents the MoinWiki programming language.
 	LanguageMoinWiki
+	// LanguageMojo represents the Mojo programming language.
+	LanguageMojo
 	// LanguageMonkey represents the Monkey programming language.
 	LanguageMonkey
 	// LanguageMonkeyC represents the MonkeyC programming language.
@@ -915,8 +1043,12 @@ const (
 	LanguageNASM
 	// LanguageNASMObjdump represents the NASMObjdump programming language.
 	LanguageNASMObjdump
+	// LanguageNatural represents the Natural programming language.
+	LanguageNatural
 	// LanguageNCL represents the NCL programming language.
 	LanguageNCL
+	// LanguageNDISASM represents the NDISASM programming language.
+	LanguageNDISASM
 	// LanguageNemerle represents the Nemerle programming language.
 	LanguageNemerle
 	// LanguageNeon represents the Neon programming language.
@@ -945,10 +1077,14 @@ const (
 	LanguageNu
 	// LanguageNumPy represents the NumPy programming language.
 	LanguageNumPy
+	// LanguageNushell represents the Nushell programming language.
+	LanguageNushell
 	// LanguageNuSMV represents the NuSMV programming language.
 	LanguageNuSMV
 	// LanguageObjdump represents the Objdump programming language.
 	LanguageObjdump
+	// LanguageObjectPascal represents the ObjectPascal programming language.
+	LanguageObjectPascal
 	// LanguageObjectiveC represents the ObjectiveC programming language.
 	LanguageObjectiveC
 	// LanguageObjectiveCPP represents the ObjectiveC++ programming language.
@@ -961,6 +1097,8 @@ const (
 	LanguageOctave
 	// LanguageODIN represents the ODIN programming language.
 	LanguageODIN
+	// LanguageOnesEnterprise represents the OnesEnterprise programming language.
+	LanguageOnesEnterprise
 	// LanguageOoc represents the Ooc programming language.
 	LanguageOoc
 	// LanguageOpa represents the Opa programming language.
@@ -1001,6 +1139,8 @@ const (
 	LanguagePkgConfig
 	// LanguagePLpgSQL represents the PLpgSQL programming language.
 	LanguagePLpgSQL
+	// LanguagePlutusCore represents the Plutus Core programming language.
+	LanguagePlutusCore
 	// LanguagePointless represents the Pointless programming language.
 	LanguagePointless
 	// LanguagePony represents the Pony programming language.
@@ -1013,21 +1153,29 @@ const (
 	LanguagePostScript
 	// LanguagePOVRay represents the POVRay programming language.
 	LanguagePOVRay
+	// LanguagePowerQuery represents the PowerQuery programming language.
+	LanguagePowerQuery
 	// LanguagePowerShell represents the PowerShell programming language.
 	LanguagePowerShell
 	// LanguagePowerShellSession represents the PowerShellSession programming language.
 	LanguagePowerShellSession
 	// LanguagePraat represents the Praat programming language.
 	LanguagePraat
+	// LanguageProcessing represents the Processing programming language.
+	LanguageProcessing
 	// LanguageProlog represents the Prolog programming language.
 	LanguageProlog
+	// LanguagePromela represents the Promela programming language.
+	LanguagePromela
 	// LanguagePromQL represents the PromQL programming language.
 	LanguagePromQL
-	// LanguagePropertiesJava represents the JavaProperties programming language.
-	LanguagePropertiesJava
 	// LanguageProtocolBuffer represents the ProtocolBuffer programming language.
 	LanguageProtocolBuffer
-	// LanguagePsyShPHP represents the PHPPsySH programming language.
+	// LanguagePRQL represents the PRQL programming language.
+	LanguagePRQL
+	// LanguagePSL represents the Property Specification Language programming language.
+	LanguagePSL
+	// LanguagePsyShPHP represents the PsySH PHP programming language.
 	LanguagePsyShPHP
 	// LanguagePug represents the Pug programming language.
 	LanguagePug
@@ -1071,6 +1219,8 @@ const (
 	LanguageRascal
 	// LanguageRawToken represents the RawToken programming language.
 	LanguageRawToken
+	// LanguageRazor represents the Razor programming language.
+	LanguageRazor
 	// LanguageRConsole represents the RConsole programming language.
 	LanguageRConsole
 	// LanguageRd represents the Rd programming language.
@@ -1091,14 +1241,18 @@ const (
 	LanguageRed
 	// LanguageRedcode represents the Redcode programming language.
 	LanguageRedcode
+	// LanguageRegistry represents the Registry programming language.
+	LanguageRegistry
+	// LanguageRego represents the Rego programming language.
+	LanguageRego
 	// LanguageRegularExpression represents the RegularExpression programming language.
 	LanguageRegularExpression
+	// LanguageRGBDSAssembly represents the RGBDS Assembly programming language.
+	LanguageRGBDSAssembly
 	// LanguageRenderScript represents the RenderScript programming language.
 	LanguageRenderScript
 	// LanguageRenPy represents the RenPy programming language.
 	LanguageRenPy
-	// LanguageRegistry represents the Registry programming language.
-	LanguageRegistry
 	// LanguageReScript represents the ReScript programming language.
 	LanguageReScript
 	// LanguageResourceBundle represents the ResourceBundle programming language.
@@ -1135,6 +1289,8 @@ const (
 	LanguageRouge
 	// LanguageRPC represents the RPC programming language.
 	LanguageRPC
+	// LanguageRPGLE represents the RPGLE programming language.
+	LanguageRPGLE
 	// LanguageRPMSpec represents the RPMSpec programming language.
 	LanguageRPMSpec
 	// LanguageRQL represents the RQL programming language.
@@ -1151,7 +1307,7 @@ const (
 	LanguageRust
 	// LanguageS represents the S programming language.
 	LanguageS
-	// LanguageSage represents the LanguageSage programming language.
+	// LanguageSage represents the Sage programming language.
 	LanguageSage
 	// LanguageSalt represents the Salt programming language.
 	LanguageSalt
@@ -1175,17 +1331,17 @@ const (
 	LanguageScribe
 	// LanguageSCSS represents the SCSS programming language.
 	LanguageSCSS
-	// LanguageSed represents the LanguageSed programming language.
+	// LanguageSed represents the Sed programming language.
 	LanguageSed
 	// LanguageSelf represents the Self programming language.
 	LanguageSelf
 	// LanguageSGML represents the SGML programming language.
 	LanguageSGML
-	// LanguageShaderLab represents the LanguageShaderLab programming language.
+	// LanguageShaderLab represents the ShaderLab programming language.
 	LanguageShaderLab
 	// LanguageShell represents the Shell programming language.
 	LanguageShell
-	// LanguageShellSession represents the LanguageShellSession programming language.
+	// LanguageShellSession represents the Shell Session programming language.
 	LanguageShellSession
 	// LanguageShen represents the Shen programming language.
 	LanguageShen
@@ -1205,10 +1361,12 @@ const (
 	LanguageSKILL
 	// LanguageSlash represents the Slash programming language.
 	LanguageSlash
-	// LanguageSlice represents the LanguageSlice programming language.
+	// LanguageSlice represents the Slice programming language.
 	LanguageSlice
 	// LanguageSlim represents the Slim programming language.
 	LanguageSlim
+	// LanguageSlint represents the Slint programming language.
+	LanguageSlint
 	// LanguageSlurm represents the Slurm programming language.
 	LanguageSlurm
 	// LanguageSmali represents the Smali programming language.
@@ -1223,10 +1381,12 @@ const (
 	LanguageSMIME
 	// LanguageSML represents the Standard ML programming language.
 	LanguageSML
-	// LanguageSmPL represents the LanguageSmPL programming language.
+	// LanguageSmPL represents the SmPL programming language.
 	LanguageSmPL
-	// LanguageSMT represents the LanguageSMT programming language.
+	// LanguageSMT represents the SMT programming language.
 	LanguageSMT
+	// LanguageSNBT represents the SNBT programming language.
+	LanguageSNBT
 	// LanguageSnobol represents the Snobol programming language.
 	LanguageSnobol
 	// LanguageSnowball represents the Snowball programming language.
@@ -1237,45 +1397,47 @@ const (
 	LanguageSourcePawn
 	// LanguageSPARQL represents the SPARQL programming language.
 	LanguageSPARQL
-	// LanguageSplineFontDatabase represents the LanguageSplineFontDatabase programming language.
+	// LanguageSplineFontDatabase represents the Spline Font Database programming language.
 	LanguageSplineFontDatabase
 	// LanguageSourcesList represents the Debian Sourcelist programming language.
 	LanguageSourcesList
-	// LanguageSQF represents the LanguageSQF programming language.
+	// LanguageSQF represents the SQF programming language.
 	LanguageSQF
 	// LanguageSQL represents the SQL programming language.
 	LanguageSQL
-	// LanguageSQLPL represents the LanguageSQLPL programming language.
+	// LanguageSQLPL represents the SQLPL programming language.
 	LanguageSQLPL
 	// LanguageSqlite3con represents the sqlite3con programming language.
 	LanguageSqlite3con
 	// LanguageSquidConf represents the SquidConf programming language.
 	LanguageSquidConf
-	// LanguageSquirrel represents the LanguageSquirrel programming language.
+	// LanguageSquirrel represents the Squirrel programming language.
 	LanguageSquirrel
-	// LanguageSRecodeTemplate represents the LanguageSRecodeTemplate programming language.
+	// LanguageSRecodeTemplate represents the SRecode Template programming language.
 	LanguageSRecodeTemplate
-	// LanguageSSHConfig represents the LanguageSSHConfig programming language.
+	// LanguageSSHConfig represents the SSH Config programming language.
 	LanguageSSHConfig
 	// LanguageSSP represents the Scalate Server Page programming language.
 	LanguageSSP
 	// LanguageStan represents the Stan programming language.
 	LanguageStan
-	// LanguageStarlark represents the LanguageStarlark programming language.
+	// LanguageStarlark represents the Starlark programming language.
 	LanguageStarlark
+	// LanguageStas represents the st(ack) as(sembler) programming language.
+	LanguageStas
 	// LanguageStata represents the Stata programming language.
 	LanguageStata
-	// LanguageSTON represents the LanguageSTON programming language.
+	// LanguageSTON represents the STON programming language.
 	LanguageSTON
-	// LanguageSVG represents the LanguageSVG programming language.
+	// LanguageSVG represents the SVG programming language.
 	LanguageSVG
 	// LanguageStylus represents the Stylus programming language.
 	LanguageStylus
 	// LanguageSublimeTextConfig represents the SublimeTextConfig programming language.
 	LanguageSublimeTextConfig
-	// LanguageSubRipText represents the LanguageSubRipText programming language.
+	// LanguageSubRipText represents the SubRip Text programming language.
 	LanguageSubRipText
-	// LanguageSugarSS represents the LanguageSugarSS programming language.
+	// LanguageSugarSS represents the SugarSS programming language.
 	LanguageSugarSS
 	// LanguageSuperCollider represents the SuperCollider programming language.
 	LanguageSuperCollider
@@ -1357,6 +1519,8 @@ const (
 	LanguageTwig
 	// LanguageTXL represent the TXL programming language.
 	LanguageTXL
+	// LanguageTypst represents the Typst programming language.
+	LanguageTypst
 	// LanguageTypeLanguage represent the TypeLanguage programming language.
 	LanguageTypeLanguage
 	// LanguageTypeScript represents the TypeScript programming language.
@@ -1383,6 +1547,8 @@ const (
 	LanguageUrWeb
 	// LanguageUSD represents the USD programming language.
 	LanguageUSD
+	// LanguageUxntal represents the Uxntal programming language.
+	LanguageUxntal
 	// LanguageV represents the V programming language.
 	LanguageV
 	// LanguageVala represents the Vala programming language.
@@ -1409,6 +1575,8 @@ const (
 	LanguageVGL
 	// LanguageVHDL represents the VHDL programming language.
 	LanguageVHDL
+	// LanguageVHS represents the VHS programming language.
+	LanguageVHS
 	// LanguageVimHelpFile represents the VimHelpFile programming language.
 	LanguageVimHelpFile
 	// LanguageVimL represents the VimL programming language.
@@ -1419,6 +1587,8 @@ const (
 	LanguageVimSnippet
 	// LanguageVolt represents the Volt programming language.
 	LanguageVolt
+	// LanguageVShell represents the V shell programming language.
+	LanguageVShell
 	// LanguageVueJS represents the VueJS programming language.
 	LanguageVueJS
 	// LanguageWavefrontMaterial represents the WavefrontMaterial programming language.
@@ -1433,6 +1603,8 @@ const (
 	LanguageWDiff
 	// LanguageWebAssembly represents the WebAssembly programming language.
 	LanguageWebAssembly
+	// LanguageWebGPUShadingLanguage represents the WebGPU Shading Language programming language.
+	LanguageWebGPUShadingLanguage
 	// LanguageWebIDL represents the WebIDL programming language.
 	LanguageWebIDL
 	// LanguageWebOntologyLanguage represents the WebOntologyLanguage programming language.
@@ -1499,8 +1671,12 @@ const (
 	LanguageYARA
 	// LanguageYASnippet represents the YASnippet programming language.
 	LanguageYASnippet
+	// LanguageZ80Assembly represents the Z80 Assembly programming language.
+	LanguageZ80Assembly
 	// LanguageZAP represents the ZAP programming language.
 	LanguageZAP
+	// LanguageZed represents the Zed programming language.
+	LanguageZed
 	// LanguageZeek represents the Zeek programming language.
 	LanguageZeek
 	// LanguageZenScript represents the ZenScript programming language.
@@ -1516,13 +1692,12 @@ const (
 )
 
 const (
-	languageUnkownStr                      = "Unknown"
 	language1CEnterpriseStr                = "1C Enterprise"
 	language4DStr                          = "4D"
 	languageABAPStr                        = "ABAP"
 	languageABNFStr                        = "ABNF"
-	languageActionScriptStr                = "ActionScript"
 	languageActionScript3Str               = "ActionScript 3"
+	languageActionScriptStr                = "ActionScript"
 	languageAdaStr                         = "Ada"
 	languageADLStr                         = "ADL"
 	languageAdobeFontMetricsStr            = "Adobe Font Metrics"
@@ -1530,9 +1705,9 @@ const (
 	languageAgdaStr                        = "Agda"
 	languageAGSScriptStr                   = "AGS Script"
 	languageAheuiStr                       = "Aheui"
-	languageALStr                          = "AL"
 	languageAlloyStr                       = "Alloy"
 	languageAlpineAbuildStr                = "Alpine Abuild"
+	languageALStr                          = "AL"
 	languageAltiumDesignerStr              = "Altium Designer"
 	languageAmbientTalkStr                 = "AmbientTalk"
 	languageAMPLStr                        = "AMPL"
@@ -1541,15 +1716,16 @@ const (
 	languageAnsibleStr                     = "Ansible"
 	languageAntBuildSystemStr              = "Ant Build System"
 	languageANTLRStr                       = "ANTLR"
-	languageApacheConfStr                  = "ApacheConf"
 	languageApacheConfigStr                = "Apache Config"
 	languageApexStr                        = "Apex"
 	languageAPIBlueprintStr                = "API Blueprint"
 	languageAPLStr                         = "APL"
 	languageApolloGuidanceComputerStr      = "Apollo Guidance Computer"
 	languageAppleScriptStr                 = "AppleScript"
+	languageArangoDBQueryLanguageStr       = "ArangoDB Query Language"
 	languageArcStr                         = "Arc"
 	languageArduinoStr                     = "Arduino"
+	languageArmAsmStr                      = "ArmAsm"
 	languageArrowStr                       = "Arrow"
 	languageASCIIDocStr                    = "AsciiDoc"
 	languageASLStr                         = "ASL"
@@ -1560,7 +1736,9 @@ const (
 	languageAspxCSharpStr                  = "aspx-cs"
 	languageAspxVBNetStr                   = "aspx-vb"
 	languageAssemblyStr                    = "Assembly"
+	languageAstroStr                       = "Astro"
 	languageAsymptoteStr                   = "Asymptote"
+	languageATLStr                         = "ATL"
 	languageATSStr                         = "ATS"
 	languageAugeasStr                      = "Augeas"
 	languageAutoconfStr                    = "Autoconf"
@@ -1570,8 +1748,8 @@ const (
 	languageAwkStr                         = "Awk"
 	languageBallerinaStr                   = "Ballerina"
 	languageBAREStr                        = "BARE"
-	languageBashStr                        = "Bash"
 	languageBashSessionStr                 = "Bash Session"
+	languageBashStr                        = "Bash"
 	languageBasicStr                       = "Basic"
 	languageBatchfileStr                   = "Batchfile"
 	languageBatchScriptStr                 = "Batch Script"
@@ -1581,6 +1759,7 @@ const (
 	languageBeefStr                        = "Beef"
 	languageBefungeStr                     = "Befunge"
 	languageBibTeXStr                      = "BibTeX"
+	languageBicepStr                       = "Bicep"
 	languageBisonStr                       = "Bison"
 	languageBitBakeStr                     = "BitBake"
 	languageBladeStr                       = "Blade"
@@ -1591,20 +1770,21 @@ const (
 	languageBluespecStr                    = "Bluespec"
 	languageBNFStr                         = "BNF"
 	languageBoaStr                         = "Boa"
-	languageBooStr                         = "Boo"
 	languageBoogieStr                      = "Boogie"
+	languageBooStr                         = "Boo"
+	languageBQNStr                         = "BQN"
 	languageBrainfuckStr                   = "Brainfuck"
 	languageBrightScriptStr                = "BrightScript"
 	languageBroStr                         = "Bro"
 	languageBrowserslistStr                = "Browserslist"
 	languageBSTStr                         = "BST"
 	languageBUGSStr                        = "BUGS"
-	languageCStr                           = "C"
 	languageC2hsHaskellStr                 = "C2hs Haskell"
+	languageC3Str                          = "C3"
 	languageCa65AssemblerStr               = "ca65 assembler"
 	languageCabalConfigStr                 = "Cabal Config"
-	languageCaddyfileStr                   = "Caddyfile"
 	languageCaddyfileDirectivesStr         = "Caddyfile Directives"
+	languageCaddyfileStr                   = "Caddyfile"
 	languageCADLStr                        = "cADL"
 	languageCAmkESStr                      = "CAmkES"
 	languageCapDLStr                       = "CapDL"
@@ -1628,20 +1808,19 @@ const (
 	languageCleanStr                       = "Clean"
 	languageClickStr                       = "Click"
 	languageCLIPSStr                       = "CLIPS"
-	languageClojureStr                     = "Clojure"
 	languageClojureScriptStr               = "ClojureScript"
+	languageClojureStr                     = "Clojure"
 	languageClosureTemplatesStr            = "Closure Templates"
 	languageCloudFirestoreSecurityRulesStr = "Cloud Firestore Security Rules"
 	languageCMakeStr                       = "CMake"
 	languageCObjdumpStr                    = "C-ObjDump"
-	languageCOBOLStr                       = "COBOL"
 	languageCOBOLFreeStr                   = "COBOLFree"
+	languageCOBOLStr                       = "COBOL"
 	languageCocoaStr                       = "Cocoa"
 	languageCodeQLStr                      = "CodeQL"
-	languageCoqStr                         = "Coq"
 	languageCoffeeScriptStr                = "CoffeeScript"
-	languageColdfusionHTMLStr              = "ColdFusion"
 	languageColdfusionCFCStr               = "ColdFusion CFC"
+	languageColdfusionHTMLStr              = "ColdFusion"
 	languageCOLLADAStr                     = "COLLADA"
 	languageCommonLispStr                  = "Common Lisp"
 	languageCommonWorkflowLanguageStr      = "Common Workflow Language"
@@ -1649,9 +1828,11 @@ const (
 	languageConfigStr                      = "Config"
 	languageCoNLLUStr                      = "CoNLL-U"
 	languageCoolStr                        = "Cool"
+	languageCoqStr                         = "Coq"
+	languageCoreStr                        = "Core"
 	languageCPerlStr                       = "cperl"
-	languageCPPStr                         = "C++"
 	languageCppObjdumpStr                  = "Cpp-ObjDump"
+	languageCPPStr                         = "C++"
 	languageCPSAStr                        = "CPSA"
 	languageCreoleStr                      = "Creole"
 	languageCrmshStr                       = "Crmsh"
@@ -1662,30 +1843,32 @@ const (
 	languageCSharpStr                      = "C#"
 	languageCSHTMLStr                      = "CSHTML"
 	languageCSONStr                        = "CSON"
-	languageCsoundStr                      = "Csound"
 	languageCsoundDocumentStr              = "Csound Document"
 	languageCsoundOrchestraStr             = "Csound Orchestra"
 	languageCsoundScoreStr                 = "Csound Score"
+	languageCsoundStr                      = "Csound"
 	languageCSSStr                         = "CSS"
+	languageCStr                           = "C"
 	languageCSVStr                         = "CSV"
 	languageCUDAStr                        = "Cuda"
+	languageCUEStr                         = "CUE"
 	languagecURLConfigStr                  = "cURL Config"
 	languageCVSStr                         = "CVS"
 	languageCWebStr                        = "CWeb"
 	languageCycriptStr                     = "Cycript"
 	languageCypherStr                      = "Cypher"
 	languageCythonStr                      = "Cython"
-	languageDStr                           = "D"
 	languageDafnyStr                       = "Dafny"
 	languageDarcsPatchStr                  = "Darcs Patch"
 	languageDartStr                        = "Dart"
-	languageDataWeaveStr                   = "DataWeave"
 	languageDASM16Str                      = "DASM16"
+	languageDataWeaveStr                   = "DataWeave"
+	languageDaxStr                         = "Dax"
 	languageDCLStr                         = "DCL"
 	languageDCPU16AsmStr                   = "DCPU-16 ASM"
 	languageDebianControlFileStr           = "Debian Control file"
 	languageDelphiStr                      = "Delphi"
-	languageDesktopStr                     = "desktop"
+	languageDesktopFileStr                 = "Desktop file"
 	languageDevicetreeStr                  = "Devicetree"
 	languageDGStr                          = "dg"
 	languageDhallStr                       = "Dhall"
@@ -1697,28 +1880,28 @@ const (
 	languageDMStr                          = "DM"
 	languageDNSZoneStr                     = "DNS Zone"
 	languageDObjdumpStr                    = "d-objdump"
-	languageDockerStr                      = "Docker"
 	languageDockerfileStr                  = "Dockerfile"
+	languageDockerStr                      = "Docker"
 	languageDocTeXStr                      = "DocTeX"
 	languageDocumentationStr               = "Documentation"
 	languageDogescriptStr                  = "Dogescript"
+	languageDStr                           = "D"
 	languageDTDStr                         = "DTD"
 	languageDTraceStr                      = "DTrace"
 	languageDuelStr                        = "Duel"
-	languageDylanStr                       = "Dylan"
 	languageDylanLIDStr                    = "DylanLID"
 	languageDylanSessionStr                = "Dylan session"
+	languageDylanStr                       = "Dylan"
 	languageDynASMStr                      = "DynASM"
-	languageEStr                           = "E"
 	languageEagleStr                       = "Eagle"
 	languageEarlGreyStr                    = "Earl Grey"
 	languageEasybuildStr                   = "Easybuild"
 	languageEasytrieveStr                  = "Easytrieve"
 	languageEBNFStr                        = "EBNF"
-	languageECStr                          = "eC"
 	languageEcereProjectsStr               = "Ecere Projects"
-	languageECLStr                         = "ECL"
 	languageEclipseStr                     = "ECLiPSe"
+	languageECLStr                         = "ECL"
+	languageECStr                          = "eC"
 	languageEditorConfigStr                = "EditorConfig"
 	languageEdjeDataCollectionStr          = "Edje Data Collection"
 	languageEdnStr                         = "edn"
@@ -1733,9 +1916,10 @@ const (
 	languageEMLStr                         = "EML"
 	languageEQStr                          = "EQ"
 	languageERBStr                         = "ERB"
-	languageErlangStr                      = "Erlang"
 	languageErlangErlSessionStr            = "Erlang erl session"
+	languageErlangStr                      = "Erlang"
 	languageEshellStr                      = "Eshell"
+	languageEStr                           = "E"
 	languageEvoqueStr                      = "Evoque"
 	languageExeclineStr                    = "execline"
 	languageEzhilStr                       = "Ezhil"
@@ -1748,24 +1932,23 @@ const (
 	languageFIGletFontStr                  = "FIGlet Font"
 	languageFilebenchWMLStr                = "Filebench WML"
 	languageFilterscriptStr                = "Filterscript"
+	languageFishStr                        = "Fish"
 	languageFlatlineStr                    = "Flatline"
 	languageFloScriptStr                   = "FloScript"
-	languageFishStr                        = "Fish"
 	languageFLUXStr                        = "FLUX"
 	languageFontStr                        = "Font"
 	languageFormattedStr                   = "Formatted"
 	languageForthStr                       = "Forth"
-	languageFortranStr                     = "Fortran"
 	languageFortranFixedStr                = "FortranFixed"
 	languageFortranFreeFormStr             = "Fortran Free Form"
-	languageFSharpStr                      = "F#"
+	languageFortranStr                     = "Fortran"
 	languageFoxProStr                      = "FoxPro"
 	languageFreefemStr                     = "Freefem"
-	langauageFreeMarkerStr                 = "FreeMarker"
-	langauageFregeStr                      = "Frege"
-	languageFutharkStr                     = "Futhark"
+	languageFreeMarkerStr                  = "FreeMarker"
+	languageFregeStr                       = "Frege"
+	languageFSharpStr                      = "F#"
 	languageFStarStr                       = "F*"
-	languageFStarLiteralStr                = "FStar"
+	languageFutharkStr                     = "Futhark"
 	languageGameMakerLanguageStr           = "Game Maker Language"
 	languageGAMLStr                        = "GAML"
 	languageGAMSStr                        = "GAMS"
@@ -1775,46 +1958,52 @@ const (
 	languageGCodeStr                       = "G-code"
 	languageGDBStr                         = "GDB"
 	languageGDNativeStr                    = "GDNative"
+	languageGDScript3Str                   = "GDScript3"
 	languageGDScriptStr                    = "GDScript"
 	languageGEDCOMStr                      = "GEDCOM"
+	languageGemtextStr                     = "Gemtext"
 	languageGenieStr                       = "Genie"
-	languageGenshiStr                      = "Genshi"
 	languageGenshiHTMLStr                  = "Genshi HTML"
+	languageGenshiStr                      = "Genshi"
 	languageGenshiTextStr                  = "Genshi Text"
 	languageGentooEbuildStr                = "Gentoo Ebuild"
 	languageGentooEclassStr                = "Gentoo Eclass"
 	languageGerberImageStr                 = "Gerber Image"
 	languageGettextCatalogStr              = "Gettext Catalog"
 	languageGherkinStr                     = "Gherkin"
-	languageGitStr                         = "Git"
 	languageGitAttributesStr               = "Git Attributes"
 	languageGitConfigStr                   = "Git Config"
+	languageGitStr                         = "Git"
+	languageGleamStr                       = "Gleam"
 	languageGLSLStr                        = "GLSL"
-	languageGlyphStr                       = "Glyph"
 	languageGlyphBitmapStr                 = "Glyph Bitmap Distribution Format"
+	languageGlyphStr                       = "Glyph"
 	languageGNStr                          = "GN"
 	languageGnuplotStr                     = "Gnuplot"
-	languageGoStr                          = "Go"
-	languageGolangStr                      = "Golang"
 	languageGoloStr                        = "Golo"
 	languageGoodDataCLStr                  = "GoodData-CL"
+	languageGoStr                          = "Go"
 	languageGosuStr                        = "Gosu"
 	languageGosuTemplateStr                = "Gosu Template"
+	languageGoHTMLTemplateStr              = "Go HTML Template"
+	languageGoTemplateStr                  = "Go Template"
+	languageGoTextTemplateStr              = "Go Text Template"
 	languageGraceStr                       = "Grace"
-	languageGradleStr                      = "Gradle"
 	languageGradleConfigStr                = "Gradle Config"
+	languageGradleStr                      = "Gradle"
 	languageGrammaticalFrameworkStr        = "Grammatical Framework"
 	languageGraphModelingLanguageStr       = "Graph Modeling Language"
 	languageGraphQLStr                     = "GraphQL"
 	languageGraphvizDOTStr                 = "Graphviz (DOT)"
 	languageGroffStr                       = "Groff"
-	languageGroovyStr                      = "Groovy"
 	languageGroovyServerPagesStr           = "Groovy Server Pages"
+	languageGroovyStr                      = "Groovy"
 	languageHackStr                        = "Hack"
 	languageHamlStr                        = "Haml"
 	languageHandlebarsStr                  = "Handlebars"
 	languageHAProxyStr                     = "HAProxy"
 	languageHarbourStr                     = "Harbour"
+	languageHareStr                        = "Hare"
 	languageHaskellStr                     = "Haskell"
 	languageHaxeStr                        = "Haxe"
 	languageHCLStr                         = "HCL"
@@ -1825,24 +2014,25 @@ const (
 	languageHolyCStr                       = "HolyC"
 	languageHSAILStr                       = "HSAIL"
 	languageHspecStr                       = "Hspec"
-	languageHTMLStr                        = "HTML"
 	languageHTMLDjangoStr                  = "HTML+Django"
 	languageHTMLECRStr                     = "HTML+ECR"
 	languageHTMLEEXStr                     = "HTML+EEX"
 	languageHTMLERBStr                     = "HTML+ERB"
 	languageHTMLPHPStr                     = "HTML+PHP"
 	languageHTMLRazorStr                   = "HTML+Razor"
+	languageHTMLStr                        = "HTML"
 	languageHTTPStr                        = "HTTP"
 	languageHxmlStr                        = "HXML"
-	languageHyStr                          = "Hy"
 	languageHybrisStr                      = "Hybris"
 	languageHyPhyStr                       = "HyPhy"
+	languageHyStr                          = "Hy"
 	languageIconStr                        = "Icon"
+	languageIDAStr                         = "IDA"
 	languageIDLStr                         = "IDL"
 	languageIdrisStr                       = "Idris"
 	languageIgnoreListStr                  = "Ignore List"
-	languageIgorStr                        = "Igor"
 	languageIGORProStr                     = "IGOR Pro"
+	languageIgorStr                        = "Igor"
 	languageImageJMacroStr                 = "ImageJ Macro"
 	languageImageJPEGStr                   = "Image (jpeg)"
 	languageImagePNGStr                    = "Image (png)"
@@ -1851,39 +2041,43 @@ const (
 	languageInform7Str                     = "Inform 7"
 	languageINIStr                         = "INI"
 	languageInnoSetupStr                   = "Inno Setup"
-	languageIoStr                          = "Io"
 	languageIokeStr                        = "Ioke"
+	languageIoStr                          = "Io"
 	languageIRCLogsStr                     = "IRC Logs"
-	languageIsabelleStr                    = "Isabelle"
 	languageIsabelleRootStr                = "Isabelle ROOT"
-	languageJStr                           = "J"
-	languageJAGSStr                        = "JAGS"
+	languageIsabelleStr                    = "Isabelle"
+	languageISCdhcpdStr                    = "ISC dhcpd"
 	languageJadeStr                        = "Jade"
+	languageJAGSStr                        = "JAGS"
+	languageJanetStr                       = "Janet"
 	languageJasminStr                      = "Jasmin"
-	languageJavaStr                        = "Java"
 	languageJavaPropertiesStr              = "Java Properties"
-	languageJavaScriptStr                  = "JavaScript"
 	languageJavaScriptERBStr               = "JavaScript+ERB"
+	languageJavaScriptStr                  = "JavaScript"
+	languageJavaStr                        = "Java"
 	languageJCLStr                         = "JCL"
 	languageJFlexStr                       = "JFlex"
-	languageJisonStr                       = "Jison"
 	languageJisonLexStr                    = "Jison Lex"
+	languageJisonStr                       = "Jison"
 	languageJolieStr                       = "Jolie"
 	languageJSGFStr                        = "JSGF"
-	languageJSONStr                        = "JSON"
 	languageJSON5Str                       = "JSON5"
+	languageJSONataStr                     = "JSONata"
 	languageJSONiqStr                      = "JSONiq"
 	languageJSONLDStr                      = "JSONLD"
 	languageJsonnetStr                     = "Jsonnet"
+	languageJSONStr                        = "JSON"
 	languageJSONWithCommentsStr            = "JSON with Comments"
 	languageJSPStr                         = "Java Server Page"
+	languageJStr                           = "J"
 	languageJSXStr                         = "JSX"
-	languageJuliaStr                       = "Julia"
 	languageJuliaConsoleStr                = "Julia console"
+	languageJuliaStr                       = "Julia"
 	languageJungleStr                      = "Jungle"
 	languageJupyterNotebookStr             = "Jupyter Notebook"
 	languageJuttleStr                      = "Juttle"
 	languageKaitaiStr                      = "Kaitai Struct"
+	languageKakouneStr                     = "Kakoune"
 	languageKalStr                         = "Kal"
 	languageKconfigStr                     = "Kconfig"
 	languageKernelLogStr                   = "Kernel log"
@@ -1901,6 +2095,7 @@ const (
 	languageLaTeXStr                       = "LaTeX"
 	languageLatteStr                       = "Latte"
 	languageLeanStr                        = "Lean"
+	languageLean4Str                       = "Lean4"
 	languageLessStr                        = "LESS"
 	languageLexStr                         = "Lex"
 	languageLFEStr                         = "LFE"
@@ -1916,15 +2111,16 @@ const (
 	languageLiterateHaskellStr             = "Literate Haskell"
 	languageLiterateIdrisStr               = "Literate Idris"
 	languageLiveScriptStr                  = "LiveScript"
-	languageLLVMStr                        = "LLVM"
-	languageLLVMMIRStr                     = "LLVM-MIR"
 	languageLLVMMIRBodyStr                 = "LLVM-MIR Body"
-	languageLogosStr                       = "Logos"
+	languageLLVMMIRStr                     = "LLVM-MIR"
+	languageLLVMStr                        = "LLVM"
 	languageLogFileStr                     = "Log File"
+	languageLogosStr                       = "Logos"
 	languageLogtalkStr                     = "Logtalk"
 	languageLOLCODEStr                     = "LOLCODE"
 	languageLookMLStr                      = "LookML"
 	languageLoomScriptStr                  = "LoomScript"
+	languageLoxStr                         = "lox"
 	languageLSLStr                         = "LSL"
 	languageLTspiceSymbolStr               = "LTspice Symbol"
 	languageLuaStr                         = "Lua"
@@ -1936,13 +2132,17 @@ const (
 	languageMarkoStr                       = "Marko"
 	languageMaskStr                        = "Mask"
 	languageMasonStr                       = "Mason"
+	languageMaterializeSQLDialectStr       = "Materialize SQL dialect"
 	languageMathematicaStr                 = "Mathematica"
-	languageMatlabStr                      = "Matlab"
 	languageMatlabSessionStr               = "Matlab session"
-	languageMaxStr                         = "Max"
+	languageMatlabStr                      = "Matlab"
 	languageMaxMSPStr                      = "Max/MSP"
+	languageMaxStr                         = "Max"
+	languageMCFunctionStr                  = "MCFunction"
+	languageMDXStr                         = "MDX"
 	languageMesonStr                       = "Meson"
 	languageMetafontStr                    = "Metafont"
+	languageMetalStr                       = "Metal"
 	languageMetapostStr                    = "Metapost"
 	languageMIMEStr                        = "MIME"
 	languageMiniDStr                       = "MiniD"
@@ -1953,8 +2153,9 @@ const (
 	languageModelicaStr                    = "Modelica"
 	languageModula2Str                     = "Modula-2"
 	languageMoinWikiStr                    = "MoinMoin/Trac Wiki markup"
-	languageMonkeyStr                      = "Monkey"
+	languageMojoStr                        = "Mojo"
 	languageMonkeyCStr                     = "MonkeyC"
+	languageMonkeyStr                      = "Monkey"
 	languageMonteStr                       = "Monte"
 	languageMOOCodeStr                     = "MOOCode"
 	languageMoonScriptStr                  = "MoonScript"
@@ -1963,38 +2164,44 @@ const (
 	languageMozPreprocHashStr              = "mozhashpreproc"
 	languageMozPreprocPercentStr           = "mozpercentpreproc"
 	languageMQLStr                         = "MQL"
-	languageMustacheStr                    = "Mustache"
 	languageMscgenStr                      = "Mscgen"
 	languageMSDOSSessionStr                = "MSDOS Session"
 	languageMuPADStr                       = "MuPAD"
+	languageMustacheStr                    = "Mustache"
 	languageMXMLStr                        = "MXML"
 	languageMyghtyStr                      = "Myghty"
 	languageMySQLStr                       = "MySQL"
-	languageNASMStr                        = "NASM"
+	languageMzqlStr                        = "mzql"
 	languageNASMObjdumpStr                 = "objdump-nasm"
+	languageNASMStr                        = "NASM"
+	languageNaturalStr                     = "Natural"
 	languageNCLStr                         = "NCL"
+	languageNDISASMStr                     = "NDISASM"
 	languageNemerleStr                     = "Nemerle"
 	languageNeonStr                        = "Neon"
 	languageNesCStr                        = "nesC"
 	languageNewLispStr                     = "newLisp"
 	languageNewspeakStr                    = "Newspeak"
-	languageNginxStr                       = "Nginx"
 	languageNginxConfigStr                 = "Nginx configuration file"
+	languageNginxStr                       = "Nginx"
 	languageNimrodStr                      = "Nimrod"
 	languageNitStr                         = "Nit"
 	languageNixStr                         = "Nix"
 	languageNotmuchStr                     = "Notmuch"
 	languageNSISStr                        = "NSIS"
-	languageNuStr                          = "Nu"
 	languageNumPyStr                       = "NumPy"
+	languageNushellStr                     = "Nushell"
 	languageNuSMVStr                       = "NuSMV"
+	languageNuStr                          = "Nu"
 	languageObjdumpStr                     = "objdump"
-	languageObjectiveCStr                  = "Objective-C"
 	languageObjectiveCPPStr                = "Objective-C++"
+	languageObjectiveCStr                  = "Objective-C"
 	languageObjectiveJStr                  = "Objective-J"
+	languageObjectPascalStr                = "ObjectPascal"
 	languageOCamlStr                       = "OCaml"
 	languageOctaveStr                      = "Octave"
-	languageODINStr                        = "ODIN"
+	languageODINStr                        = "Odin"
+	languageOnesEnterpriseStr              = "OnesEnterprise"
 	languageOocStr                         = "ooc"
 	languageOpaStr                         = "Opa"
 	languageOpenEdgeABLStr                 = "OpenEdge ABL"
@@ -2007,61 +2214,68 @@ const (
 	languagePascalStr                      = "Pascal"
 	languagePawnStr                        = "Pawn"
 	languagePEGStr                         = "PEG"
-	languagePerlStr                        = "Perl"
 	languagePerl6Str                       = "Perl6"
+	languagePerlStr                        = "Perl"
 	languagePHPStr                         = "PHP"
 	languagePHTMLStr                       = "PHTML"
 	languagePigStr                         = "Pig"
 	languagePikeStr                        = "Pike"
 	languagePkgConfigStr                   = "PkgConfig"
 	languagePLpgSQLStr                     = "PL/pgSQL"
+	languagePlutusCoreStr                  = "Plutus Core"
 	languagePointlessStr                   = "Pointless"
 	languagePonyStr                        = "Pony"
-	languagePostgresStr                    = "PostgreSQL SQL dialect"
 	languagePostgresConsoleStr             = "PostgreSQL console (psql)"
-	languagePOVRayStr                      = "POVRay"
+	languagePostgresStr                    = "PostgreSQL SQL dialect"
 	languagePostScriptStr                  = "PostScript"
-	languagePowerShellStr                  = "PowerShell"
+	languagePOVRayStr                      = "POVRay"
+	languagePowerQueryStr                  = "PowerQuery"
 	languagePowerShellSessionStr           = "PowerShell Session"
+	languagePowerShellStr                  = "PowerShell"
 	languagePraatStr                       = "Praat"
+	languageProcessingStr                  = "Processing"
 	languagePrologStr                      = "Prolog"
+	languagePromelaStr                     = "Promela"
 	languagePromQLStr                      = "PromQL"
-	languagePropertiesJavaStr              = "Properties"
 	languageProtocolBufferStr              = "Protocol Buffer"
+	languagePRQLStr                        = "PRQL"
+	languagePSLStr                         = "Property Specification Language"
 	languagePsyShPHPStr                    = "PsySH console session for PHP"
 	languagePugStr                         = "Pug"
 	languagePuppetStr                      = "Puppet"
 	languagePureDataStr                    = "Pure Data"
 	languagePureScriptStr                  = "PureScript"
 	languagePyPyLogStr                     = "PyPy Log"
-	languagePythonStr                      = "Python"
-	languagePython2Str                     = "Python 2.x"
+	languagePython2Str                     = "Python 2"
 	languagePython2TracebackStr            = "Python 2.x Traceback"
 	languagePythonConsoleStr               = "Python console session"
+	languagePythonStr                      = "Python"
 	languagePythonTracebackStr             = "Python Traceback"
 	languageQBasicStr                      = "QBasic"
 	languageQMLStr                         = "QML"
 	languageQVTOStr                        = "QVTO"
-	languageRStr                           = "R"
 	languageRacketStr                      = "Racket"
-	languageRagelStr                       = "Ragel"
 	languageRagelEmbeddedStr               = "Embedded Ragel"
+	languageRagelStr                       = "Ragel"
 	languageRakuStr                        = "Raku"
 	languageRAMLStr                        = "RAML"
 	languageRascalStr                      = "Rascal"
 	languageRawTokenStr                    = "Raw token data" // nolint:gosec
+	languageRazorStr                       = "Razor"
 	languageRConsoleStr                    = "RConsole"
-	languageRdStr                          = "Rd"
 	languageRDocStr                        = "RDoc"
+	languageRdStr                          = "Rd"
 	languageReadlineConfigStr              = "Readline Config"
 	languageREALbasicStr                   = "REALbasic"
 	languageReasonMLStr                    = "Reason"
 	languageREBOLStr                       = "Rebol"
 	languageRecordJarStr                   = "Record Jar"
-	languageRedStr                         = "Red"
 	languageRedcodeStr                     = "Redcode"
+	languageRedStr                         = "Red"
 	languageRegistryStr                    = "reg"
+	languageRegoStr                        = "Rego"
 	languageRegularExpressionStr           = "Regular Expression"
+	languageRGBDSAssemblyStr               = "RGBDS Assembly"
 	languageRenderScriptStr                = "RenderScript"
 	languageRenPyStr                       = "Ren'Py"
 	languageReScriptStr                    = "ReScript"
@@ -2078,24 +2292,25 @@ const (
 	languageRoboconfGraphStr               = "Roboconf Graph"
 	languageRoboconfInstancesStr           = "Roboconf Instances"
 	languageRobotFrameworkStr              = "RobotFramework"
-	languageRoffStr                        = "Roff"
 	languageRoffManpageStr                 = "Roff Manpage"
+	languageRoffStr                        = "Roff"
 	languageRougeStr                       = "Rouge"
 	languageRPCStr                         = "RPC"
+	languageRPGLEStr                       = "RPGLE"
 	languageRPMSpecStr                     = "RPMSpec"
 	languageRQLStr                         = "RQL"
 	languageRSLStr                         = "RSL"
-	languageRubyStr                        = "Ruby"
+	languageRStr                           = "R"
 	languageRubyIRBSessionStr              = "Ruby irb session"
+	languageRubyStr                        = "Ruby"
 	languageRUNOFFStr                      = "RUNOFF"
 	languageRustStr                        = "Rust"
-	languageSStr                           = "S"
 	languageSageStr                        = "Sage"
-	languageSaltStr                        = "Salt"
 	languageSaltStackStr                   = "SaltStack"
+	languageSaltStr                        = "Salt"
 	languageSARLStr                        = "SARL"
-	languageSASStr                         = "SAS"
 	languageSassStr                        = "Sass"
+	languageSASStr                         = "SAS"
 	languageScalaStr                       = "Scala"
 	languageScamlStr                       = "Scaml"
 	languageScdocStr                       = "scdoc"
@@ -2107,8 +2322,8 @@ const (
 	languageSelfStr                        = "Self"
 	languageSGMLStr                        = "SGML"
 	languageShaderLabStr                   = "ShaderLab"
-	languageShellStr                       = "Shell"
 	languageShellSessionStr                = "ShellSession"
+	languageShellStr                       = "Shell"
 	languageShenStr                        = "Shen"
 	languageShExCStr                       = "ShExC"
 	languageSieveStr                       = "Sieve"
@@ -2120,6 +2335,7 @@ const (
 	languageSlashStr                       = "Slash"
 	languageSliceStr                       = "Slice"
 	languageSlimStr                        = "Slim"
+	languageSlintStr                       = "Slint"
 	languageSlurmStr                       = "Slurm"
 	languageSmaliStr                       = "Smali"
 	languageSmalltalkStr                   = "Smalltalk"
@@ -2129,6 +2345,7 @@ const (
 	languageSMLStr                         = "Standard ML"
 	languageSmPLStr                        = "SmPL"
 	languageSMTStr                         = "SMT"
+	languageSNBTStr                        = "SNBT"
 	languageSnobolStr                      = "Snobol"
 	languageSnowballStr                    = "Snowball"
 	languageSolidityStr                    = "Solidity"
@@ -2137,16 +2354,18 @@ const (
 	languageSPARQLStr                      = "SPARQL"
 	languageSplineFontDatabaseStr          = "Spline Font Database"
 	languageSQFStr                         = "SQF"
-	languageSQLStr                         = "SQL"
-	languageSQLPLStr                       = "SQLPL"
 	languageSqlite3conStr                  = "sqlite3con"
+	languageSQLPLStr                       = "SQLPL"
+	languageSQLStr                         = "SQL"
 	languageSquidConfStr                   = "SquidConf"
 	languageSquirrelStr                    = "Squirrel"
 	languageSRecodeTemplateStr             = "SRecode Template"
 	languageSSHConfigStr                   = "SSH Config"
 	languageSSPStr                         = "Scalate Server Page"
+	languageSStr                           = "S"
 	languageStanStr                        = "Stan"
 	languageStarlarkStr                    = "Starlark"
+	languageStasStr                        = "st(ack) as(sembler)"
 	languageStataStr                       = "Stata"
 	languageSTONStr                        = "STON"
 	languageStylusStr                      = "Stylus"
@@ -2165,18 +2384,18 @@ const (
 	languageTAPStr                         = "TAP"
 	languageTASMStr                        = "TASM"
 	languageTclStr                         = "Tcl"
-	languageTcshStr                        = "Tcsh"
 	languageTcshSessionStr                 = "Tcsh Session"
+	languageTcshStr                        = "Tcsh"
 	languageTeaStr                         = "Tea"
 	languageTeraTermStr                    = "Tera Term macro"
 	languageTermcapStr                     = "Termcap"
 	languageTerminfoStr                    = "Terminfo"
-	languageTerraStr                       = "Terra"
 	languageTerraformStr                   = "Terraform"
-	languageTeXStr                         = "TeX"
+	languageTerraStr                       = "Terra"
 	languageTexinfoStr                     = "Texinfo"
-	languageTextStr                        = "Text"
+	languageTeXStr                         = "TeX"
 	languageTextileStr                     = "Textile"
+	languageTextStr                        = "Text"
 	languageThriftStr                      = "Thrift"
 	languageTiddlerStr                     = "tiddler"
 	languageTIProgramStr                   = "TI Program"
@@ -2186,9 +2405,8 @@ const (
 	languageTOMLStr                        = "TOML"
 	languageTradingViewStr                 = "TradingView"
 	languageTrafficScriptStr               = "TrafficScript"
-	languageTransactSQLStr                 = "Transact-SQL"
-	languageTSQLStr                        = "TSQL"
 	languageTreetopStr                     = "Treetop"
+	languageTSQLStr                        = "TSQL"
 	languageTSVStr                         = "TSV"
 	languageTSXStr                         = "TSX"
 	languageTuringStr                      = "Turing"
@@ -2198,42 +2416,48 @@ const (
 	languageTypeLanguageStr                = "Type Language"
 	languageTypeScriptStr                  = "TypeScript"
 	languageTypoScriptStr                  = "TypoScript"
+	languageTypstStr                       = "Typst"
 	languageUcodeStr                       = "ucode"
 	languageUniconStr                      = "Unicon"
 	languageUnifiedParallelCStr            = "Unified Parallel C"
 	languageUnity3DAssetStr                = "Unity3D Asset"
 	languageUnixAssemblyStr                = "Unix Assembly"
+	languageUnknownStr                     = "Unknown"
 	languageUnoStr                         = "Uno"
 	languageUnrealScriptStr                = "UnrealScript"
 	languageUrbiScriptStr                  = "UrbiScript"
 	languageUrWebStr                       = "UrWeb"
 	languageUSDStr                         = "USD"
-	languageVStr                           = "V"
+	languageUxntalStr                      = "Uxntal"
 	languageValaStr                        = "Vala"
-	languageVBStr                          = "VB"
 	languageVBAStr                         = "VBA"
 	languageVBNetStr                       = "VB.NET"
 	languageVBScriptStr                    = "VBScript"
-	languageVCLStr                         = "VCL"
+	languageVBStr                          = "VB"
 	languageVCLSnippetsStr                 = "VCLSnippets"
+	languageVCLStr                         = "VCL"
 	languageVCTreeStatusStr                = "VCTreeStatus"
 	languageVelocityStr                    = "Velocity"
 	languageVerilogStr                     = "Verilog"
 	languageVGLStr                         = "VGL"
 	languageVHDLStr                        = "VHDL"
+	languageVHSStr                         = "VHS"
 	languageVimHelpFileStr                 = "Vim Help File"
 	languageVimLStr                        = "VimL"
-	languageVimScriptStr                   = "Vim script"
+	languageVimScriptStr                   = "Vim Script"
 	languageVimSnippetStr                  = "Vim Snippet"
-	languageVisualBasicNet                 = "Visual Basic .NET"
+	languageVisualBasicNetStr              = "Visual Basic .NET"
 	languageVoltStr                        = "Volt"
+	languageVShellStr                      = "V shell"
+	languageVStr                           = "V"
 	languageVueJSStr                       = "Vue.js"
 	languageWavefrontMaterialStr           = "Wavefront Material"
 	languageWavefrontObjectStr             = "Wavefront Object"
+	languageWDiffStr                       = "WDiff"
 	languageWdlStr                         = "wdl"
 	languageWDTEStr                        = "WDTE"
-	languageWDiffStr                       = "WDiff"
 	languageWebAssemblyStr                 = "WebAssembly"
+	languageWebGPUShadingLanguageStr       = "WebGPU Shading Language"
 	languageWebIDLStr                      = "WebIDL"
 	languageWebOntologyLanguageStr         = "Web Ontology Language"
 	languageWebVTTStr                      = "WebVTT"
@@ -2247,19 +2471,19 @@ const (
 	languageXAMLStr                        = "XAML"
 	languageXBaseStr                       = "xBase"
 	languageXBitMapStr                     = "X BitMap"
-	languageXCStr                          = "XC"
 	languageXComposeStr                    = "XCompose"
+	languageXCStr                          = "XC"
 	languageXFontDirectoryIndexStr         = "X Font Directory Index"
-	languageXMLStr                         = "XML"
 	languageXMLPropertyListStr             = "XML Property List"
+	languageXMLStr                         = "XML"
 	languageXojoStr                        = "Xojo"
 	languageXorgStr                        = "Xorg"
 	languageXPagesStr                      = "XPages"
 	languageXPixMapStr                     = "X PixMap"
 	languageXProcStr                       = "XProc"
 	languageXQueryStr                      = "XQuery"
-	languageXSStr                          = "XS"
 	languageXSLTStr                        = "XSLT"
+	languageXSStr                          = "XS"
 	languageXtendStr                       = "Xtend"
 	languageXtlangStr                      = "xtlang"
 	languageYaccStr                        = "Yacc"
@@ -2267,7 +2491,9 @@ const (
 	languageYANGStr                        = "YANG"
 	languageYARAStr                        = "YARA"
 	languageYASnippetStr                   = "YASnippet"
+	languageZ80AssemblyStr                 = "Z80 Assembly"
 	languageZAPStr                         = "ZAP"
+	languageZedStr                         = "Zed"
 	languageZeekStr                        = "Zeek"
 	languageZenScriptStr                   = "ZenScript"
 	languageZephirStr                      = "Zephir"
@@ -2276,3263 +2502,41 @@ const (
 	languageZimplStr                       = "Zimpl"
 )
 
-const (
-	languageAMPLChromaStr               = "Ampl"
-	languageAssemblyChromaStr           = "GAS"
-	languageAutoHotkeyChromaStr         = "autohotkey"
-	languageCObjdumpChromaStr           = "c-objdump"
-	languageColdfusionCFCChromaStr      = "Coldfusion CFC"
-	languageColdfusionHTMLChromaStr     = "Coldfusion HTML"
-	languageCppObjdumpChromaStr         = "cpp-objdump"
-	languageCUDAChromaStr               = "CUDA"
-	languageFSharpChromaStr             = "FSharp"
-	languageEmacsLispChromaStr          = "EmacsLisp"
-	languageGoHTMLTemplateChromaStr     = "Go HTML Template"
-	languageGoTextTemplateChromaStr     = "Go Text Template"
-	languageHxmlChromaStr               = "Hxml"
-	languageJSXChromaStr                = "react"
-	languageJSONLDChromaStr             = "JSON-LD"
-	languageLessChromaStr               = "LessCss"
-	languageLiquidChromaStr             = "liquid"
-	languageMakefileChromaStr           = "Base Makefile"
-	languageMarkdownChromaStr           = "markdown"
-	languageNewLispChromaStr            = "NewLisp"
-	languageNimrodChromaStr             = "Nim"
-	languagePython3ChromaStr            = "Python 3"
-	languageOocChromaStr                = "Ooc"
-	languageOrgChromaStr                = "Org Mode"
-	languageRChromaStr                  = "R"
-	languageReasonMLChromaStr           = "ReasonML"
-	languageREBOLChromaStr              = "REBOL"
-	languageRexxChromaStr               = "Rexx"
-	languageSYSTEMDChromaStr            = "SYSTEMD"
-	languageSystemVerilogChromaStr      = "systemverilog"
-	languageTextChromaStr               = "plaintext"
-	languageTransactSQLChromaStr        = "Transact-SQL"
-	languageTypoScriptHTMLDataChromaStr = "TypoScriptHtmlData"
-	languageTypoScriptCSSDataChromaStr  = "TypoScriptCssData"
-	languageVBNetChromaStr              = "VB.net"
-	languageVerilogChromaStr            = "verilog"
-	languageVueJSChromaStr              = "vue"
-	languageWebIDLChromaStr             = "Web IDL"
-)
-
 // ParseLanguage parses a language from a string. Will return false
 // as second parameter, if language could not be parsed.
-// nolint:gocyclo
 func ParseLanguage(s string) (Language, bool) {
-	switch normalizeString(s) {
-	case normalizeString(language1CEnterpriseStr):
-		return Language1CEnterprise, true
-	case normalizeString(language4DStr):
-		return Language4D, true
-	case normalizeString(languageABNFStr):
-		return LanguageABNF, true
-	case normalizeString(languageABAPStr):
-		return LanguageABAP, true
-	case normalizeString(languageAdaStr):
-		return LanguageAda, true
-	case normalizeString(languageADLStr):
-		return LanguageADL, true
-	case normalizeString(languageAdobeFontMetricsStr):
-		return LanguageAdobeFontMetrics, true
-	case normalizeString(languageAdvPLStr):
-		return LanguageAdvPL, true
-	case normalizeString(languageActionScriptStr):
-		return LanguageActionScript, true
-	case normalizeString(languageActionScript3Str):
-		return LanguageActionScript3, true
-	case normalizeString(languageAgdaStr):
-		return LanguageAgda, true
-	case normalizeString(languageAGSScriptStr):
-		return LanguageAGSScript, true
-	case normalizeString(languageAheuiStr):
-		return LanguageAheui, true
-	case normalizeString(languageALStr):
-		return LanguageAL, true
-	case normalizeString(languageAlloyStr):
-		return LanguageAlloy, true
-	case normalizeString(languageAlpineAbuildStr):
-		return LanguageAlpineAbuild, true
-	case normalizeString(languageAltiumDesignerStr):
-		return LanguageAltiumDesigner, true
-	case normalizeString(languageAmbientTalkStr):
-		return LanguageAmbientTalk, true
-	case normalizeString(languageAMPLStr):
-		return LanguageAMPL, true
-	case normalizeString(languageAngelScriptStr):
-		return LanguageAngelScript, true
-	case normalizeString(languageAngular2Str):
-		return LanguageAngular2, true
-	case normalizeString(languageAnsibleStr):
-		return LanguageAnsible, true
-	case normalizeString(languageAntBuildSystemStr):
-		return LanguageAntBuildSystem, true
-	case normalizeString(languageANTLRStr):
-		return LanguageANTLR, true
-	case normalizeString(languageApacheConfStr):
-		return LanguageApacheConfig, true
-	case normalizeString(languageApacheConfigStr):
-		return LanguageApacheConfig, true
-	case normalizeString(languageApexStr):
-		return LanguageApex, true
-	case normalizeString(languageAPIBlueprintStr):
-		return LanguageAPIBlueprint, true
-	case normalizeString(languageAPLStr):
-		return LanguageAPL, true
-	case normalizeString(languageApolloGuidanceComputerStr):
-		return LanguageApolloGuidanceComputer, true
-	case normalizeString(languageAppleScriptStr):
-		return LanguageAppleScript, true
-	case normalizeString(languageArcStr):
-		return LanguageArc, true
-	case normalizeString(languageArduinoStr):
-		return LanguageArduino, true
-	case normalizeString(languageArrowStr):
-		return LanguageArrow, true
-	case normalizeString(languageASCIIDocStr):
-		return LanguageASCIIDoc, true
-	case normalizeString(languageASLStr):
-		return LanguageASL, true
-	case normalizeString(languageASN1Str):
-		return LanguageASN1, true
-	case normalizeString(languageASPClassicStr):
-		return LanguageClassicASP, true
-	case normalizeString(languageASPDotNetStr):
-		return LanguageASPDotNet, true
-	case normalizeString(languageAspectJStr):
-		return LanguageAspectJ, true
-	case normalizeString(languageAspxCSharpStr):
-		return LanguageAspxCSharp, true
-	case normalizeString(languageAspxVBNetStr):
-		return LanguageAspxVBNet, true
-	case normalizeString(languageAssemblyStr):
-		return LanguageAssembly, true
-	case normalizeString(languageAsymptoteStr):
-		return LanguageAsymptote, true
-	case normalizeString(languageATSStr):
-		return LanguageATS, true
-	case normalizeString(languageAugeasStr):
-		return LanguageAugeas, true
-	case normalizeString(languageAutoconfStr):
-		return LanguageAutoconf, true
-	case normalizeString(languageAutoHotkeyStr):
-		return LanguageAutoHotkey, true
-	case normalizeString(languageAutoItStr):
-		return LanguageAutoIt, true
-	case normalizeString(languageAvroIDLStr):
-		return LanguageAvroIDL, true
-	case normalizeString(languageAwkStr):
-		return LanguageAwk, true
-	case normalizeString(languageBallerinaStr):
-		return LanguageBallerina, true
-	case normalizeString(languageBAREStr):
-		return LanguageBARE, true
-	case normalizeString(languageBashStr):
-		return LanguageBash, true
-	case normalizeString(languageBashSessionStr):
-		return LanguageBashSession, true
-	case normalizeString(languageBasicStr):
-		return LanguageBasic, true
-	case normalizeString(languageBatchfileStr):
-		return LanguageBatchfile, true
-	case normalizeString(languageBatchScriptStr):
-		return LanguageBatchfile, true
-	case normalizeString(languageBBCBasicStr):
-		return LanguageBBCBasic, true
-	case normalizeString(languageBBCodeStr):
-		return LanguageBBCode, true
-	case normalizeString(languageBCStr):
-		return LanguageBC, true
-	case normalizeString(languageBeefStr):
-		return LanguageBeef, true
-	case normalizeString(languageBefungeStr):
-		return LanguageBefunge, true
-	case normalizeString(languageBibTeXStr):
-		return LanguageBibTeX, true
-	case normalizeString(languageBisonStr):
-		return LanguageBison, true
-	case normalizeString(languageBitBakeStr):
-		return LanguageBitBake, true
-	case normalizeString(languageBladeStr):
-		return LanguageBlade, true
-	case normalizeString(languageBladeTemplateStr):
-		return LanguageBladeTemplate, true
-	case normalizeString(languageBlazorStr):
-		return LanguageBlazor, true
-	case normalizeString(languageBlitzBasicStr):
-		return LanguageBlitzBasic, true
-	case normalizeString(languageBlitzMaxStr):
-		return LanguageBlitzMax, true
-	case normalizeString(languageBluespecStr):
-		return LanguageBluespec, true
-	case normalizeString(languageBNFStr):
-		return LanguageBNF, true
-	case normalizeString(languageBoaStr):
-		return LanguageBoa, true
-	case normalizeString(languageBooStr):
-		return LanguageBoo, true
-	case normalizeString(languageBoogieStr):
-		return LanguageBoogie, true
-	case normalizeString(languageBrainfuckStr):
-		return LanguageBrainfuck, true
-	case normalizeString(languageBrightScriptStr):
-		return LanguageBrightScript, true
-	case normalizeString(languageBroStr):
-		return LanguageBro, true
-	case normalizeString(languageBrowserslistStr):
-		return LanguageBrowserslist, true
-	case normalizeString(languageBSTStr):
-		return LanguageBST, true
-	case normalizeString(languageBUGSStr):
-		return LanguageBUGS, true
-	case normalizeString(languageCStr):
-		return LanguageC, true
-	case normalizeString(languageC2hsHaskellStr):
-		return LanguageC2hsHaskell, true
-	case normalizeString(languageCa65AssemblerStr):
-		return LanguageCa65Assembler, true
-	case normalizeString(languageCabalConfigStr):
-		return LanguageCabalConfig, true
-	case normalizeString(languageCaddyfileStr):
-		return LanguageCaddyfile, true
-	case normalizeString(languageCaddyfileDirectivesStr):
-		return LanguageCaddyfileDirectives, true
-	case normalizeString(languageCADLStr):
-		return LanguageCADL, true
-	case normalizeString(languageCAmkESStr):
-		return LanguageCAmkES, true
-	case normalizeString(languageCapDLStr):
-		return LanguageCapDL, true
-	case normalizeString(languageCapNProtoStr):
-		return LanguageCapNProto, true
-	case normalizeString(languageCartoCSSStr):
-		return LanguageCartoCSS, true
-	case normalizeString(languageCassandraCQLStr):
-		return LanguageCassandraCQL, true
-	case normalizeString(languageCBMBasicV2Str):
-		return LanguageCBMBasicV2, true
-	case normalizeString(languageCeylonStr):
-		return LanguageCeylon, true
-	case normalizeString(languageCFEngine3Str):
-		return LanguageCFEngine3, true
-	case normalizeString(languageCfstatementStr):
-		return LanguageCfstatement, true
-	case normalizeString(languageChaiScriptStr):
-		return LanguageChaiScript, true
-	case normalizeString(languageChapelStr):
-		return LanguageChapel, true
-	case normalizeString(languageCharityStr):
-		return LanguageCharity, true
-	case normalizeString(languageCharmciStr):
-		return LanguageCharmci, true
-	case normalizeString(languageCheetahStr):
-		return LanguageCheetah, true
-	case normalizeString(languageChucKStr):
-		return LanguageChucK, true
-	case normalizeString(languageCirruStr):
-		return LanguageCirru, true
-	case normalizeString(languageClarionStr):
-		return LanguageClarion, true
-	case normalizeString(languageClassicASPStr):
-		return LanguageClassicASP, true
-	case normalizeString(languageClayStr):
-		return LanguageClay, true
-	case normalizeString(languageCleanStr):
-		return LanguageClean, true
-	case normalizeString(languageClickStr):
-		return LanguageClick, true
-	case normalizeString(languageCLIPSStr):
-		return LanguageCLIPS, true
-	case normalizeString(languageClojureStr):
-		return LanguageClojure, true
-	case normalizeString(languageClojureScriptStr):
-		return LanguageClojureScript, true
-	case normalizeString(languageClosureTemplatesStr):
-		return LanguageClosureTemplates, true
-	case normalizeString(languageCloudFirestoreSecurityRulesStr):
-		return LanguageCloudFirestoreSecurityRules, true
-	case normalizeString(languageCMakeStr):
-		return LanguageCMake, true
-	case normalizeString(languageCObjdumpStr):
-		return LanguageCObjdump, true
-	case normalizeString(languageCOBOLStr):
-		return LanguageCOBOL, true
-	case normalizeString(languageCOBOLFreeStr):
-		return LanguageCOBOLFree, true
-	case normalizeString(languageCocoaStr):
-		return LanguageCocoa, true
-	case normalizeString(languageCodeQLStr):
-		return LanguageCodeQL, true
-	case normalizeString(languageCoffeeScriptStr):
-		return LanguageCoffeeScript, true
-	case normalizeString(languageColdfusionCFCStr):
-		return LanguageColdfusionCFC, true
-	case normalizeString(languageColdfusionHTMLStr):
-		return LanguageColdfusionHTML, true
-	case normalizeString(languageCOLLADAStr):
-		return LanguageCOLLADA, true
-	case normalizeString(languageCommonLispStr):
-		return LanguageCommonLisp, true
-	case normalizeString(languageCommonWorkflowLanguageStr):
-		return LanguageCommonWorkflowLanguage, true
-	case normalizeString(languageComponentPascalStr):
-		return LanguageComponentPascal, true
-	case normalizeString(languageConfigStr):
-		return LanguageConfig, true
-	case normalizeString(languageCoNLLUStr):
-		return LanguageCoNLLU, true
-	case normalizeString(languageCoolStr):
-		return LanguageCool, true
-	case normalizeString(languageCoqStr):
-		return LanguageCoq, true
-	case normalizeString(languageCPerlStr):
-		return LanguageCPerl, true
-	case normalizeString(languageCPPStr):
-		return LanguageCPP, true
-	case normalizeString(languageCppObjdumpStr):
-		return LanguageCppObjdump, true
-	case normalizeString(languageCPSAStr):
-		return LanguageCPSA, true
-	case normalizeString(languageCreoleStr):
-		return LanguageCreole, true
-	case normalizeString(languageCrmshStr):
-		return LanguageCrmsh, true
-	case normalizeString(languageCrocStr):
-		return LanguageCroc, true
-	case normalizeString(languageCrontabStr):
-		return LanguageCrontab, true
-	case normalizeString(languageCryptolStr):
-		return LanguageCryptol, true
-	case normalizeString(languageCrystalStr):
-		return LanguageCrystal, true
-	case normalizeString(languageCSharpStr):
-		return LanguageCSharp, true
-	case normalizeString(languageCSHTMLStr):
-		return LanguageCSHTML, true
-	case normalizeString(languageCSONStr):
-		return LanguageCSON, true
-	case normalizeString(languageCsoundStr):
-		return LanguageCsound, true
-	case normalizeString(languageCsoundDocumentStr):
-		return LanguageCsoundDocument, true
-	case normalizeString(languageCsoundOrchestraStr):
-		return LanguageCsoundOrchestra, true
-	case normalizeString(languageCsoundScoreStr):
-		return LanguageCsoundScore, true
-	case normalizeString(languageCSSStr):
-		return LanguageCSS, true
-	case normalizeString(languageCSVStr):
-		return LanguageCSV, true
-	case normalizeString(languageCUDAStr):
-		return LanguageCUDA, true
-	case normalizeString(languagecURLConfigStr):
-		return LanguagecURLConfig, true
-	case normalizeString(languageCVSStr):
-		return LanguageCVS, true
-	case normalizeString(languageCWebStr):
-		return LanguageCWeb, true
-	case normalizeString(languageCycriptStr):
-		return LanguageCycript, true
-	case normalizeString(languageCypherStr):
-		return LanguageCypher, true
-	case normalizeString(languageCythonStr):
-		return LanguageCython, true
-	case normalizeString(languageDStr):
-		return LanguageD, true
-	case normalizeString(languageDafnyStr):
-		return LanguageDafny, true
-	case normalizeString(languageDarcsPatchStr):
-		return LanguageDarcsPatch, true
-	case normalizeString(languageDartStr):
-		return LanguageDart, true
-	case normalizeString(languageDataWeaveStr):
-		return LanguageDataWeave, true
-	case normalizeString(languageDASM16Str):
-		return LanguageDASM16, true
-	case normalizeString(languageDCLStr):
-		return LanguageDCL, true
-	case normalizeString(languageDCPU16AsmStr):
-		return LanguageDCPU16Asm, true
-	case normalizeString(languageDebianControlFileStr):
-		return LanguageDebianControlFile, true
-	case normalizeString(languageDelphiStr):
-		return LanguageDelphi, true
-	case normalizeString(languageDesktopStr):
-		return LanguageDesktop, true
-	case normalizeString(languageDevicetreeStr):
-		return LanguageDevicetree, true
-	case normalizeString(languageDGStr):
-		return LanguageDG, true
-	case normalizeString(languageDhallStr):
-		return LanguageDhall, true
-	case normalizeString(languageDiffStr):
-		return LanguageDiff, true
-	case normalizeString(languageDigitalCommandStr):
-		return LanguageDigitalCommand, true
-	case normalizeString(languageDircolorsStr):
-		return LanguageDircolors, true
-	case normalizeString(languageDirectX3DFileStr):
-		return LanguageDirectX3DFile, true
-	case normalizeString(languageDjangoJinjaStr):
-		return LanguageDjangoJinja, true
-	case normalizeString(languageDMStr):
-		return LanguageDM, true
-	case normalizeString(languageDNSZoneStr):
-		return LanguageDNSZone, true
-	case normalizeString(languageDObjdumpStr):
-		return LanguageDObjdump, true
-	case normalizeString(languageDockerStr):
-		return LanguageDocker, true
-	case normalizeString(languageDockerfileStr):
-		return LanguageDockerfile, true
-	case normalizeString(languageDocTeXStr):
-		return LanguageDocTeX, true
-	case normalizeString(languageDocumentationStr):
-		return LanguageDocumentation, true
-	case normalizeString(languageDogescriptStr):
-		return LanguageDogescript, true
-	case normalizeString(languageDTDStr):
-		return LanguageDTD, true
-	case normalizeString(languageDTraceStr):
-		return LanguageDTrace, true
-	case normalizeString(languageDuelStr):
-		return LanguageDuel, true
-	case normalizeString(languageDylanStr):
-		return LanguageDylan, true
-	case normalizeString(languageDylanLIDStr):
-		return LanguageDylanLID, true
-	case normalizeString(languageDylanSessionStr):
-		return LanguageDylanSession, true
-	case normalizeString(languageDynASMStr):
-		return LanguageDynASM, true
-	case normalizeString(languageEStr):
-		return LanguageE, true
-	case normalizeString(languageEagleStr):
-		return LanguageEagle, true
-	case normalizeString(languageEarlGreyStr):
-		return LanguageEarlGrey, true
-	case normalizeString(languageEasybuildStr):
-		return LanguageEasybuild, true
-	case normalizeString(languageEasytrieveStr):
-		return LanguageEasytrieve, true
-	case normalizeString(languageEBNFStr):
-		return LanguageEBNF, true
-	case normalizeString(languageECStr):
-		return LanguageEC, true
-	case normalizeString(languageEcereProjectsStr):
-		return LanguageEcereProjects, true
-	case normalizeString(languageECLStr):
-		return LanguageECL, true
-	case normalizeString(languageEclipseStr):
-		return LanguageEclipse, true
-	case normalizeString(languageEditorConfigStr):
-		return LanguageEditorConfig, true
-	case normalizeString(languageEdjeDataCollectionStr):
-		return LanguageEdjeDataCollection, true
-	case normalizeString(languageEdnStr):
-		return LanguageEdn, true
-	case normalizeString(languageEiffelStr):
-		return LanguageEiffel, true
-	case normalizeString(languageEJSStr):
-		return LanguageEJS, true
-	case normalizeString(languageElixirStr):
-		return LanguageElixir, true
-	case normalizeString(languageElixirIexSessionStr):
-		return LanguageElixirIexSession, true
-	case normalizeString(languageElmStr):
-		return LanguageElm, true
-	case normalizeString(languageEmacsLispStr):
-		return LanguageEmacsLisp, true
-	case normalizeString(languageEMailStr):
-		return LanguageEMail, true
-	case normalizeString(languageEmberScriptStr):
-		return LanguageEmberScript, true
-	case normalizeString(languageEMLStr):
-		return LanguageEML, true
-	case normalizeString(languageEQStr):
-		return LanguageEQ, true
-	case normalizeString(languageERBStr):
-		return LanguageERB, true
-	case normalizeString(languageErlangStr):
-		return LanguageErlang, true
-	case normalizeString(languageErlangErlSessionStr):
-		return LanguageErlangErlSession, true
-	case normalizeString(languageEshellStr):
-		return LanguageEshell, true
-	case normalizeString(languageEvoqueStr):
-		return LanguageEvoque, true
-	case normalizeString(languageExeclineStr):
-		return LanguageExecline, true
-	case normalizeString(languageEzhilStr):
-		return LanguageEzhil, true
-	case normalizeString(languageFactorStr):
-		return LanguageFactor, true
-	case normalizeString(languageFancyStr):
-		return LanguageFancy, true
-	case normalizeString(languageFantomStr):
-		return LanguageFantom, true
-	case normalizeString(languageFaustStr):
-		return LanguageFaust, true
-	case normalizeString(languageFelixStr):
-		return LanguageFelix, true
-	case normalizeString(languageFennelStr):
-		return LanguageFennel, true
-	case normalizeString(languageFIGletFontStr):
-		return LanguageFIGletFont, true
-	case normalizeString(languageFilebenchWMLStr):
-		return LanguageFilebenchWML, true
-	case normalizeString(languageFilterscriptStr):
-		return LanguageFilterscript, true
-	case normalizeString(languageFlatlineStr):
-		return LanguageFlatline, true
-	case normalizeString(languageFloScriptStr):
-		return LanguageFloScript, true
-	case normalizeString(languageFishStr):
-		return LanguageFish, true
-	case normalizeString(languageFLUXStr):
-		return LanguageFLUX, true
-	case normalizeString(languageFontStr):
-		return LanguageFont, true
-	case normalizeString(languageFormattedStr):
-		return LanguageFormatted, true
-	case normalizeString(languageForthStr):
-		return LanguageForth, true
-	case normalizeString(languageFortranStr):
-		return LanguageFortran, true
-	case normalizeString(languageFortranFixedStr):
-		return LanguageFortranFixed, true
-	case normalizeString(languageFortranFreeFormStr):
-		return LanguageFortranFreeForm, true
-	case normalizeString(languageFSharpStr):
-		return LanguageFSharp, true
-	case normalizeString(languageFoxProStr):
-		return LanguageFoxPro, true
-	case normalizeString(languageFreefemStr):
-		return LanguageFreefem, true
-	case normalizeString(langauageFreeMarkerStr):
-		return LangauageFreeMarker, true
-	case normalizeString(langauageFregeStr):
-		return LangauageFrege, true
-	case normalizeString(languageFutharkStr):
-		return LanguageFuthark, true
-	case normalizeString(languageFStarStr):
-		return LanguageFStar, true
-	case normalizeString(languageFStarLiteralStr):
-		return LanguageFStar, true
-	case normalizeString(languageGameMakerLanguageStr):
-		return LanguageGameMakerLanguage, true
-	case normalizeString(languageGAMLStr):
-		return LanguageGAML, true
-	case normalizeString(languageGAMSStr):
-		return LanguageGAMS, true
-	case normalizeString(languageGapStr):
-		return LanguageGap, true
-	case normalizeString(languageGasStr):
-		return LanguageGas, true
-	case normalizeString(languageGCCMachineDescriptionStr):
-		return LanguageGCCMachineDescription, true
-	case normalizeString(languageGCodeStr):
-		return LanguageGCode, true
-	case normalizeString(languageGDBStr):
-		return LanguageGDB, true
-	case normalizeString(languageGDNativeStr):
-		return LanguageGDNative, true
-	case normalizeString(languageGDScriptStr):
-		return LanguageGDScript, true
-	case normalizeString(languageGEDCOMStr):
-		return LanguageGEDCOM, true
-	case normalizeString(languageGenieStr):
-		return LanguageGenie, true
-	case normalizeString(languageGenshiStr):
-		return LanguageGenshi, true
-	case normalizeString(languageGenshiHTMLStr):
-		return LanguageGenshiHTML, true
-	case normalizeString(languageGenshiTextStr):
-		return LanguageGenshiText, true
-	case normalizeString(languageGentooEbuildStr):
-		return LanguageGentooEbuild, true
-	case normalizeString(languageGentooEclassStr):
-		return LanguageGentooEclass, true
-	case normalizeString(languageGerberImageStr):
-		return LanguageGerberImage, true
-	case normalizeString(languageGettextCatalogStr):
-		return LanguageGettextCatalog, true
-	case normalizeString(languageGherkinStr):
-		return LanguageGherkin, true
-	case normalizeString(languageGitStr):
-		return LanguageGit, true
-	case normalizeString(languageGitAttributesStr):
-		return LanguageGitAttributes, true
-	case normalizeString(languageGitConfigStr):
-		return LanguageGitConfig, true
-	case normalizeString(languageGLSLStr):
-		return LanguageGLSL, true
-	case normalizeString(languageGlyphStr):
-		return LanguageGlyph, true
-	case normalizeString(languageGlyphBitmapStr):
-		return LanguageGlyphBitmap, true
-	case normalizeString(languageGNStr):
-		return LanguageGN, true
-	case normalizeString(languageGnuplotStr):
-		return LanguageGnuplot, true
-	case normalizeString(languageGoStr):
-		return LanguageGo, true
-	case normalizeString(languageGolangStr):
-		return LanguageGo, true
-	case normalizeString(languageGoloStr):
-		return LanguageGolo, true
-	case normalizeString(languageGoodDataCLStr):
-		return LanguageGoodDataCL, true
-	case normalizeString(languageGosuStr):
-		return LanguageGosu, true
-	case normalizeString(languageGosuTemplateStr):
-		return LanguageGosuTemplate, true
-	case normalizeString(languageGraceStr):
-		return LanguageGrace, true
-	case normalizeString(languageGradleStr):
-		return LanguageGradle, true
-	case normalizeString(languageGradleConfigStr):
-		return LanguageGradleConfig, true
-	case normalizeString(languageGrammaticalFrameworkStr):
-		return LanguageGrammaticalFramework, true
-	case normalizeString(languageGraphModelingLanguageStr):
-		return LanguageGraphModelingLanguage, true
-	case normalizeString(languageGraphQLStr):
-		return LanguageGraphQL, true
-	case normalizeString(languageGraphvizDOTStr):
-		return LanguageGraphvizDOT, true
-	case normalizeString(languageGroffStr):
-		return LanguageGroff, true
-	case normalizeString(languageGroovyStr):
-		return LanguageGroovy, true
-	case normalizeString(languageGroovyServerPagesStr):
-		return LanguageGroovyServerPages, true
-	case normalizeString(languageHackStr):
-		return LanguageHack, true
-	case normalizeString(languageHamlStr):
-		return LanguageHaml, true
-	case normalizeString(languageHandlebarsStr):
-		return LanguageHandlebars, true
-	case normalizeString(languageHAProxyStr):
-		return LanguageHAProxy, true
-	case normalizeString(languageHarbourStr):
-		return LanguageHarbour, true
-	case normalizeString(languageHaskellStr):
-		return LanguageHaskell, true
-	case normalizeString(languageHaxeStr):
-		return LanguageHaxe, true
-	case normalizeString(languageHCLStr):
-		return LanguageHCL, true
-	case normalizeString(languageHexdumpStr):
-		return LanguageHexdump, true
-	case normalizeString(languageHiveQLStr):
-		return LanguageHiveQL, true
-	case normalizeString(languageHLBStr):
-		return LanguageHLB, true
-	case normalizeString(languageHLSLStr):
-		return LanguageHLSL, true
-	case normalizeString(languageHolyCStr):
-		return LanguageHolyC, true
-	case normalizeString(languageHSAILStr):
-		return LanguageHSAIL, true
-	case normalizeString(languageHspecStr):
-		return LanguageHspec, true
-	case normalizeString(languageHTMLStr):
-		return LanguageHTML, true
-	case normalizeString(languageHTMLDjangoStr):
-		return LanguageHTMLDjango, true
-	case normalizeString(languageHTMLECRStr):
-		return LanguageHTMLECR, true
-	case normalizeString(languageHTMLEEXStr):
-		return LanguageHTMLEEX, true
-	case normalizeString(languageHTMLERBStr):
-		return LanguageHTMLERB, true
-	case normalizeString(languageHTMLPHPStr):
-		return LanguageHTMLPHP, true
-	case normalizeString(languageHTMLRazorStr):
-		return LanguageHTMLRazor, true
-	case normalizeString(languageHTTPStr):
-		return LanguageHTTP, true
-	case normalizeString(languageHxmlStr):
-		return LanguageHxml, true
-	case normalizeString(languageHyStr):
-		return LanguageHy, true
-	case normalizeString(languageHybrisStr):
-		return LanguageHybris, true
-	case normalizeString(languageHyPhyStr):
-		return LanguageHyPhy, true
-	case normalizeString(languageIconStr):
-		return LanguageIcon, true
-	case normalizeString(languageIDLStr):
-		return LanguageIDL, true
-	case normalizeString(languageIdrisStr):
-		return LanguageIdris, true
-	case normalizeString(languageIgnoreListStr):
-		return LanguageIgnoreList, true
-	case normalizeString(languageIgorStr):
-		return LanguageIgor, true
-	case normalizeString(languageIGORProStr):
-		return LanguageIGORPro, true
-	case normalizeString(languageImageJMacroStr):
-		return LanguageImageJMacro, true
-	case normalizeString(languageImageJPEGStr):
-		return LanguageImageJPEG, true
-	case normalizeString(languageImagePNGStr):
-		return LanguageImagePNG, true
-	case normalizeString(languageInform6Str):
-		return LanguageInform6, true
-	case normalizeString(languageInform6TemplateStr):
-		return LanguageInform6Template, true
-	case normalizeString(languageInform7Str):
-		return LanguageInform7, true
-	case normalizeString(languageINIStr):
-		return LanguageINI, true
-	case normalizeString(languageInnoSetupStr):
-		return LanguageInnoSetup, true
-	case normalizeString(languageIoStr):
-		return LanguageIo, true
-	case normalizeString(languageIokeStr):
-		return LanguageIoke, true
-	case normalizeString(languageIRCLogsStr):
-		return LanguageIRCLogs, true
-	case normalizeString(languageIsabelleStr):
-		return LanguageIsabelle, true
-	case normalizeString(languageIsabelleRootStr):
-		return LanguageIsabelleRoot, true
-	case normalizeString(languageJStr):
-		return LanguageJ, true
-	case normalizeString(languageJAGSStr):
-		return LanguageJAGS, true
-	case normalizeString(languageJadeStr):
-		return LanguageJade, true
-	case normalizeString(languageJasminStr):
-		return LanguageJasmin, true
-	case normalizeString(languageJavaStr):
-		return LanguageJava, true
-	case normalizeString(languageJavaPropertiesStr):
-		return LanguageJavaProperties, true
-	case normalizeString(languageJavaScriptStr):
-		return LanguageJavaScript, true
-	case normalizeString(languageJavaScriptERBStr):
-		return LanguageJavaScriptERB, true
-	case normalizeString(languageJCLStr):
-		return LanguageJCL, true
-	case normalizeString(languageJFlexStr):
-		return LanguageJFlex, true
-	case normalizeString(languageJisonStr):
-		return LanguageJison, true
-	case normalizeString(languageJisonLexStr):
-		return LanguageJisonLex, true
-	case normalizeString(languageJolieStr):
-		return LanguageJolie, true
-	case normalizeString(languageJSGFStr):
-		return LanguageJSGF, true
-	case normalizeString(languageJSONStr):
-		return LanguageJSON, true
-	case normalizeString(languageJSON5Str):
-		return LanguageJSON5, true
-	case normalizeString(languageJSONiqStr):
-		return LanguageJSONiq, true
-	case normalizeString(languageJSONLDStr):
-		return LanguageJSONLD, true
-	case normalizeString(languageJsonnetStr):
-		return LanguageJsonnet, true
-	case normalizeString(languageJSONWithCommentsStr):
-		return LanguageJSONWithComments, true
-	case normalizeString(languageJSPStr):
-		return LanguageJSP, true
-	case normalizeString(languageJSXStr):
-		return LanguageJSX, true
-	case normalizeString(languageJuliaStr):
-		return LanguageJulia, true
-	case normalizeString(languageJuliaConsoleStr):
-		return LanguageJuliaConsole, true
-	case normalizeString(languageJungleStr):
-		return LanguageJungle, true
-	case normalizeString(languageJupyterNotebookStr):
-		return LanguageJupyterNotebook, true
-	case normalizeString(languageJuttleStr):
-		return LanguageJuttle, true
-	case normalizeString(languageKaitaiStr):
-		return LanguageKaitai, true
-	case normalizeString(languageKalStr):
-		return LanguageKal, true
-	case normalizeString(languageKconfigStr):
-		return LanguageKconfig, true
-	case normalizeString(languageKernelLogStr):
-		return LanguageKernelLog, true
-	case normalizeString(languageKiCadLayoutStr):
-		return LanguageKiCadLayout, true
-	case normalizeString(languageKiCadLegacyLayoutStr):
-		return LanguageKiCadLegacyLayout, true
-	case normalizeString(languageKiCadSchematicStr):
-		return LanguageKiCadSchematic, true
-	case normalizeString(languageKitStr):
-		return LanguageKit, true
-	case normalizeString(languageKokaStr):
-		return LanguageKoka, true
-	case normalizeString(languageKotlinStr):
-		return LanguageKotlin, true
-	case normalizeString(languageKRLStr):
-		return LanguageKRL, true
-	case normalizeString(languageLabVIEWStr):
-		return LanguageLabVIEW, true
-	case normalizeString(languageLaravelTemplateStr):
-		return LanguageLaravelTemplate, true
-	case normalizeString(languageLarkStr):
-		return LanguageLark, true
-	case normalizeString(languageLassoStr):
-		return LanguageLasso, true
-	case normalizeString(languageLaTeXStr):
-		return LanguageLaTeX, true
-	case normalizeString(languageLatteStr):
-		return LanguageLatte, true
-	case normalizeString(languageLeanStr):
-		return LanguageLean, true
-	case normalizeString(languageLessStr):
-		return LanguageLess, true
-	case normalizeString(languageLexStr):
-		return LanguageLex, true
-	case normalizeString(languageLFEStr):
-		return LanguageLFE, true
-	case normalizeString(languageLighttpdStr):
-		return LanguageLighttpd, true
-	case normalizeString(languageLilyPondStr):
-		return LanguageLilyPond, true
-	case normalizeString(languageLimboStr):
-		return LanguageLimbo, true
-	case normalizeString(languageLinkerScriptStr):
-		return LanguageLinkerScript, true
-	case normalizeString(languageLinuxKernelModuleStr):
-		return LanguageLinuxKernelModule, true
-	case normalizeString(languageLiquidStr):
-		return LanguageLiquid, true
-	case normalizeString(languageLiterateAgdaStr):
-		return LanguageLiterateAgda, true
-	case normalizeString(languageLiterateCoffeeScriptStr):
-		return LanguageLiterateCoffeeScript, true
-	case normalizeString(languageLiterateCryptolStr):
-		return LanguageLiterateCryptol, true
-	case normalizeString(languageLiterateHaskellStr):
-		return LanguageLiterateHaskell, true
-	case normalizeString(languageLiterateIdrisStr):
-		return LanguageLiterateIdris, true
-	case normalizeString(languageLiveScriptStr):
-		return LanguageLiveScript, true
-	case normalizeString(languageLLVMStr):
-		return LanguageLLVM, true
-	case normalizeString(languageLLVMMIRStr):
-		return LanguageLLVMMIR, true
-	case normalizeString(languageLLVMMIRBodyStr):
-		return LanguageLLVMMIRBody, true
-	case normalizeString(languageLogosStr):
-		return LanguageLogos, true
-	case normalizeString(languageLogFileStr):
-		return LanguageLogFile, true
-	case normalizeString(languageLogtalkStr):
-		return LanguageLogtalk, true
-	case normalizeString(languageLOLCODEStr):
-		return LanguageLOLCODE, true
-	case normalizeString(languageLookMLStr):
-		return LanguageLookML, true
-	case normalizeString(languageLoomScriptStr):
-		return LanguageLoomScript, true
-	case normalizeString(languageLSLStr):
-		return LanguageLSL, true
-	case normalizeString(languageLTspiceSymbolStr):
-		return LanguageLTspiceSymbol, true
-	case normalizeString(languageLuaStr):
-		return LanguageLua, true
-	case normalizeString(languageMakefileStr):
-		return LanguageMakefile, true
-	case normalizeString(languageMakoStr):
-		return LanguageMako, true
-	case normalizeString(languageManStr):
-		return LanguageMan, true
-	case normalizeString(languageMAQLStr):
-		return LanguageMAQL, true
-	case normalizeString(languageMarkdownStr):
-		return LanguageMarkdown, true
-	case normalizeString(languageMarkoStr):
-		return LanguageMarko, true
-	case normalizeString(languageMaskStr):
-		return LanguageMask, true
-	case normalizeString(languageMasonStr):
-		return LanguageMason, true
-	case normalizeString(languageMathematicaStr):
-		return LanguageMathematica, true
-	case normalizeString(languageMatlabStr):
-		return LanguageMatlab, true
-	case normalizeString(languageMatlabSessionStr):
-		return LanguageMatlabSession, true
-	case normalizeString(languageMaxStr):
-		return LanguageMax, true
-	case normalizeString(languageMaxMSPStr):
-		return LanguageMaxMSP, true
-	case normalizeString(languageMesonStr):
-		return LanguageMeson, true
-	case normalizeString(languageMetafontStr):
-		return LanguageMetafont, true
-	case normalizeString(languageMetapostStr):
-		return LanguageMetapost, true
-	case normalizeString(languageMIMEStr):
-		return LanguageMIME, true
-	case normalizeString(languageMiniDStr):
-		return LanguageMiniD, true
-	case normalizeString(languageMiniScriptStr):
-		return LanguageMiniScript, true
-	case normalizeString(languageMiniZincStr):
-		return LanguageMiniZinc, true
-	case normalizeString(languageMirahStr):
-		return LanguageMirah, true
-	case normalizeString(languageMLIRStr):
-		return LanguageMLIR, true
-	case normalizeString(languageModelicaStr):
-		return LanguageModelica, true
-	case normalizeString(languageModula2Str):
-		return LanguageModula2, true
-	case normalizeString(languageMoinWikiStr):
-		return LanguageMoinWiki, true
-	case normalizeString(languageMonkeyStr):
-		return LanguageMonkey, true
-	case normalizeString(languageMonkeyCStr):
-		return LanguageMonkeyC, true
-	case normalizeString(languageMonteStr):
-		return LanguageMonte, true
-	case normalizeString(languageMOOCodeStr):
-		return LanguageMOOCode, true
-	case normalizeString(languageMoonScriptStr):
-		return LanguageMoonScript, true
-	case normalizeString(languageMorrowindScriptStr):
-		return LanguageMorrowindScript, true
-	case normalizeString(languageMoselStr):
-		return LanguageMosel, true
-	case normalizeString(languageMozPreprocHashStr):
-		return LanguageMozPreprocHash, true
-	case normalizeString(languageMozPreprocPercentStr):
-		return LanguageMozPreprocPercent, true
-	case normalizeString(languageMQLStr):
-		return LanguageMQL, true
-	case normalizeString(languageMscgenStr):
-		return LanguageMscgen, true
-	case normalizeString(languageMSDOSSessionStr):
-		return LanguageMSDOSSession, true
-	case normalizeString(languageMuPADStr):
-		return LanguageMuPAD, true
-	case normalizeString(languageMXMLStr):
-		return LanguageMXML, true
-	case normalizeString(languageMyghtyStr):
-		return LanguageMyghty, true
-	case normalizeString(languageMySQLStr):
-		return LanguageMySQL, true
-	case normalizeString(languageMustacheStr):
-		return LanguageMustache, true
-	case normalizeString(languageNASMStr):
-		return LanguageNASM, true
-	case normalizeString(languageNCLStr):
-		return LanguageNCL, true
-	case normalizeString(languageNemerleStr):
-		return LanguageNemerle, true
-	case normalizeString(languageNeonStr):
-		return LanguageNeon, true
-	case normalizeString(languageNesCStr):
-		return LanguageNesC, true
-	case normalizeString(languageNewLispStr):
-		return LanguageNewLisp, true
-	case normalizeString(languageNewspeakStr):
-		return LanguageNewspeak, true
-	case normalizeString(languageNginxStr):
-		return LanguageNginx, true
-	case normalizeString(languageNginxConfigStr):
-		return LanguageNginxConfig, true
-	case normalizeString(languageNimrodStr):
-		return LanguageNimrod, true
-	case normalizeString(languageNitStr):
-		return LanguageNit, true
-	case normalizeString(languageNixStr):
-		return LanguageNix, true
-	case normalizeString(languageNotmuchStr):
-		return LanguageNotmuch, true
-	case normalizeString(languageNSISStr):
-		return LanguageNSIS, true
-	case normalizeString(languageNuStr):
-		return LanguageNu, true
-	case normalizeString(languageNumPyStr):
-		return LanguageNumPy, true
-	case normalizeString(languageNuSMVStr):
-		return LanguageNuSMV, true
-	case normalizeString(languageNASMObjdumpStr):
-		return LanguageNASMObjdump, true
-	case normalizeString(languageObjdumpStr):
-		return LanguageObjdump, true
-	case normalizeString(languageObjectiveCStr):
-		return LanguageObjectiveC, true
-	case normalizeString(languageObjectiveCPPStr):
-		return LanguageObjectiveCPP, true
-	case normalizeString(languageObjectiveJStr):
-		return LanguageObjectiveJ, true
-	case normalizeString(languageOCamlStr):
-		return LanguageOCaml, true
-	case normalizeString(languageOctaveStr):
-		return LanguageOctave, true
-	case normalizeString(languageODINStr):
-		return LanguageODIN, true
-	case normalizeString(languageOocStr):
-		return LanguageOoc, true
-	case normalizeString(languageOpaStr):
-		return LanguageOpa, true
-	case normalizeString(languageOpenEdgeABLStr):
-		return LanguageOpenEdgeABL, true
-	case normalizeString(languageOpenSCADStr):
-		return LanguageOpenSCAD, true
-	case normalizeString(languageOrgStr):
-		return LanguageOrg, true
-	case normalizeString(languagePacmanConfStr):
-		return LanguagePacmanConf, true
-	case normalizeString(languagePanStr):
-		return LanguagePan, true
-	case normalizeString(languageParaSailStr):
-		return LanguageParaSail, true
-	case normalizeString(languageParrotStr):
-		return LanguageParrot, true
-	case normalizeString(languagePascalStr):
-		return LanguagePascal, true
-	case normalizeString(languagePawnStr):
-		return LanguagePawn, true
-	case normalizeString(languagePEGStr):
-		return LanguagePEG, true
-	case normalizeString(languagePerlStr):
-		return LanguagePerl, true
-	case normalizeString(languagePerl6Str):
-		return LanguagePerl6, true
-	case normalizeString(languagePHPStr):
-		return LanguagePHP, true
-	case normalizeString(languagePHTMLStr):
-		return LanguagePHTML, true
-	case normalizeString(languagePigStr):
-		return LanguagePig, true
-	case normalizeString(languagePikeStr):
-		return LanguagePike, true
-	case normalizeString(languagePkgConfigStr):
-		return LanguagePkgConfig, true
-	case normalizeString(languagePLpgSQLStr):
-		return LanguagePLpgSQL, true
-	case normalizeString(languagePointlessStr):
-		return LanguagePointless, true
-	case normalizeString(languagePonyStr):
-		return LanguagePony, true
-	case normalizeString(languagePostgresStr):
-		return LanguagePostgres, true
-	case normalizeString(languagePostgresConsoleStr):
-		return LanguagePostgresConsole, true
-	case normalizeString(languagePostScriptStr):
-		return LanguagePostScript, true
-	case normalizeString(languagePOVRayStr):
-		return LanguagePOVRay, true
-	case normalizeString(languagePowerShellStr):
-		return LanguagePowerShell, true
-	case normalizeString(languagePowerShellSessionStr):
-		return LanguagePowerShellSession, true
-	case normalizeString(languagePraatStr):
-		return LanguagePraat, true
-	case normalizeString(languagePrologStr):
-		return LanguageProlog, true
-	case normalizeString(languagePromQLStr):
-		return LanguagePromQL, true
-	case normalizeString(languagePropertiesJavaStr):
-		return LanguagePropertiesJava, true
-	case normalizeString(languageProtocolBufferStr):
-		return LanguageProtocolBuffer, true
-	case normalizeString(languagePsyShPHPStr):
-		return LanguagePsyShPHP, true
-	case normalizeString(languagePugStr):
-		return LanguagePug, true
-	case normalizeString(languagePuppetStr):
-		return LanguagePuppet, true
-	case normalizeString(languagePureDataStr):
-		return LanguagePureData, true
-	case normalizeString(languagePureScriptStr):
-		return LanguagePureScript, true
-	case normalizeString(languagePyPyLogStr):
-		return LanguagePyPyLog, true
-	case normalizeString(languagePythonStr):
-		return LanguagePython, true
-	case normalizeString(languagePython2Str):
-		return LanguagePython2, true
-	case normalizeString(languagePython2TracebackStr):
-		return LanguagePython2Traceback, true
-	case normalizeString(languagePythonConsoleStr):
-		return LanguagePythonConsole, true
-	case normalizeString(languagePythonTracebackStr):
-		return LanguagePythonTraceback, true
-	case normalizeString(languageQBasicStr):
-		return LanguageQBasic, true
-	case normalizeString(languageQMLStr):
-		return LanguageQML, true
-	case normalizeString(languageQVTOStr):
-		return LanguageQVTO, true
-	case normalizeString(languageRStr):
-		return LanguageR, true
-	case normalizeString(languageRacketStr):
-		return LanguageRacket, true
-	case normalizeString(languageRagelStr):
-		return LanguageRagel, true
-	case normalizeString(languageRagelEmbeddedStr):
-		return LanguageRagelEmbedded, true
-	case normalizeString(languageRakuStr):
-		return LanguageRaku, true
-	case normalizeString(languageRAMLStr):
-		return LanguageRAML, true
-	case normalizeString(languageRascalStr):
-		return LanguageRascal, true
-	case normalizeString(languageRawTokenStr):
-		return LanguageRawToken, true
-	case normalizeString(languageRConsoleStr):
-		return LanguageRConsole, true
-	case normalizeString(languageRdStr):
-		return LanguageRd, true
-	case normalizeString(languageRDocStr):
-		return LanguageRDoc, true
-	case normalizeString(languageReadlineConfigStr):
-		return LanguageReadlineConfig, true
-	case normalizeString(languageREALbasicStr):
-		return LanguageREALbasic, true
-	case normalizeString(languageReasonMLStr):
-		return LanguageReasonML, true
-	case normalizeString(languageREBOLStr):
-		return LanguageREBOL, true
-	case normalizeString(languageRecordJarStr):
-		return LanguageRecordJar, true
-	case normalizeString(languageRedStr):
-		return LanguageRed, true
-	case normalizeString(languageRedcodeStr):
-		return LanguageRedcode, true
-	case normalizeString(languageRegistryStr):
-		return LanguageRegistry, true
-	case normalizeString(languageRegularExpressionStr):
-		return LanguageRegularExpression, true
-	case normalizeString(languageRenderScriptStr):
-		return LanguageRenderScript, true
-	case normalizeString(languageRenPyStr):
-		return LanguageRenPy, true
-	case normalizeString(languageReScriptStr):
-		return LanguageReScript, true
-	case normalizeString(languageResourceBundleStr):
-		return LanguageResourceBundle, true
-	case normalizeString(languageReStructuredTextStr):
-		return LanguageReStructuredText, true
-	case normalizeString(languageRexxStr):
-		return LanguageRexx, true
-	case normalizeString(languageRHTMLStr):
-		return LanguageRHTML, true
-	case normalizeString(languageRichTextFormatStr):
-		return LanguageRichTextFormat, true
-	case normalizeString(languageRideStr):
-		return LanguageRide, true
-	case normalizeString(languageRingStr):
-		return LanguageRing, true
-	case normalizeString(languageRiotStr):
-		return LanguageRiot, true
-	case normalizeString(languageRMarkdownStr):
-		return LanguageRMarkdown, true
-	case normalizeString(languageRNGCompactStr):
-		return LanguageRNGCompact, true
-	case normalizeString(languageRoboconfGraphStr):
-		return LanguageRoboconfGraph, true
-	case normalizeString(languageRoboconfInstancesStr):
-		return LanguageRoboconfInstances, true
-	case normalizeString(languageRobotFrameworkStr):
-		return LanguageRobotFramework, true
-	case normalizeString(languageRoffStr):
-		return LanguageRoff, true
-	case normalizeString(languageRoffManpageStr):
-		return LanguageRoffManpage, true
-	case normalizeString(languageRougeStr):
-		return LanguageRouge, true
-	case normalizeString(languageRPCStr):
-		return LanguageRPC, true
-	case normalizeString(languageRPMSpecStr):
-		return LanguageRPMSpec, true
-	case normalizeString(languageRQLStr):
-		return LanguageRQL, true
-	case normalizeString(languageRSLStr):
-		return LanguageRSL, true
-	case normalizeString(languageRubyStr):
-		return LanguageRuby, true
-	case normalizeString(languageRubyIRBSessionStr):
-		return LanguageRubyIRBSession, true
-	case normalizeString(languageRUNOFFStr):
-		return LanguageRUNOFF, true
-	case normalizeString(languageRustStr):
-		return LanguageRust, true
-	case normalizeString(languageSStr):
-		return LanguageS, true
-	case normalizeString(languageSageStr):
-		return LanguageSage, true
-	case normalizeString(languageSaltStr):
-		return LanguageSalt, true
-	case normalizeString(languageSaltStackStr):
-		return LanguageSalt, true
-	case normalizeString(languageSARLStr):
-		return LanguageSARL, true
-	case normalizeString(languageSASStr):
-		return LanguageSAS, true
-	case normalizeString(languageSassStr):
-		return LanguageSass, true
-	case normalizeString(languageScalaStr):
-		return LanguageScala, true
-	case normalizeString(languageScamlStr):
-		return LanguageScaml, true
-	case normalizeString(languageScdocStr):
-		return LanguageScdoc, true
-	case normalizeString(languageSchemeStr):
-		return LanguageScheme, true
-	case normalizeString(languageScilabStr):
-		return LanguageScilab, true
-	case normalizeString(languageScribeStr):
-		return LanguageScribe, true
-	case normalizeString(languageSCSSStr):
-		return LanguageSCSS, true
-	case normalizeString(languageSedStr):
-		return LanguageSed, true
-	case normalizeString(languageSelfStr):
-		return LanguageSelf, true
-	case normalizeString(languageSGMLStr):
-		return LanguageSGML, true
-	case normalizeString(languageShaderLabStr):
-		return LanguageShaderLab, true
-	case normalizeString(languageShellStr):
-		return LanguageShell, true
-	case normalizeString(languageShellSessionStr):
-		return LanguageShellSession, true
-	case normalizeString(languageShenStr):
-		return LanguageShen, true
-	case normalizeString(languageShExCStr):
-		return LanguageShExC, true
-	case normalizeString(languageSieveStr):
-		return LanguageSieve, true
-	case normalizeString(languageSilverStr):
-		return LanguageSilver, true
-	case normalizeString(languageSimulaStr):
-		return LanguageSimula, true
-	case normalizeString(languageSingularityStr):
-		return LanguageSingularity, true
-	case normalizeString(languageSketchDrawingStr):
-		return LanguageSketchDrawing, true
-	case normalizeString(languageSKILLStr):
-		return LanguageSKILL, true
-	case normalizeString(languageSlashStr):
-		return LanguageSlash, true
-	case normalizeString(languageSliceStr):
-		return LanguageSlice, true
-	case normalizeString(languageSlimStr):
-		return LanguageSlim, true
-	case normalizeString(languageSlurmStr):
-		return LanguageSlurm, true
-	case normalizeString(languageSmaliStr):
-		return LanguageSmali, true
-	case normalizeString(languageSmalltalkStr):
-		return LanguageSmalltalk, true
-	case normalizeString(languageSmartGameFormatStr):
-		return LanguageSmartGameFormat, true
-	case normalizeString(languageSmartyStr):
-		return LanguageSmarty, true
-	case normalizeString(languageSMIMEStr):
-		return LanguageSMIME, true
-	case normalizeString(languageSMLStr):
-		return LanguageSML, true
-	case normalizeString(languageSmPLStr):
-		return LanguageSmPL, true
-	case normalizeString(languageSMTStr):
-		return LanguageSMT, true
-	case normalizeString(languageSnobolStr):
-		return LanguageSnobol, true
-	case normalizeString(languageSnowballStr):
-		return LanguageSnowball, true
-	case normalizeString(languageSolidityStr):
-		return LanguageSolidity, true
-	case normalizeString(languageSourcePawnStr):
-		return LanguageSourcePawn, true
-	case normalizeString(languageSourcesListStr):
-		return LanguageSourcesList, true
-	case normalizeString(languageSPARQLStr):
-		return LanguageSPARQL, true
-	case normalizeString(languageSplineFontDatabaseStr):
-		return LanguageSplineFontDatabase, true
-	case normalizeString(languageSQFStr):
-		return LanguageSQF, true
-	case normalizeString(languageSQLStr):
-		return LanguageSQL, true
-	case normalizeString(languageSQLPLStr):
-		return LanguageSQLPL, true
-	case normalizeString(languageSqlite3conStr):
-		return LanguageSqlite3con, true
-	case normalizeString(languageSquidConfStr):
-		return LanguageSquidConf, true
-	case normalizeString(languageSquirrelStr):
-		return LanguageSquirrel, true
-	case normalizeString(languageSRecodeTemplateStr):
-		return LanguageSRecodeTemplate, true
-	case normalizeString(languageSSHConfigStr):
-		return LanguageSSHConfig, true
-	case normalizeString(languageSSPStr):
-		return LanguageSSP, true
-	case normalizeString(languageStanStr):
-		return LanguageStan, true
-	case normalizeString(languageStarlarkStr):
-		return LanguageStarlark, true
-	case normalizeString(languageStataStr):
-		return LanguageStata, true
-	case normalizeString(languageSTONStr):
-		return LanguageSTON, true
-	case normalizeString(languageStylusStr):
-		return LanguageStylus, true
-	case normalizeString(languageSublimeTextConfigStr):
-		return LanguageSublimeTextConfig, true
-	case normalizeString(languageSubRipTextStr):
-		return LanguageSubRipText, true
-	case normalizeString(languageSugarSSStr):
-		return LanguageSugarSS, true
-	case normalizeString(languageSuperColliderStr):
-		return LanguageSuperCollider, true
-	case normalizeString(languageSvelteStr):
-		return LanguageSvelte, true
-	case normalizeString(languageSVGStr):
-		return LanguageSVG, true
-	case normalizeString(languageSwiftStr):
-		return LanguageSwift, true
-	case normalizeString(languageSWIGStr):
-		return LanguageSWIG, true
-	case normalizeString(languageSYSTEMDStr):
-		return LanguageSYSTEMD, true
-	case normalizeString(languageSystemVerilogStr):
-		return LanguageSystemVerilog, true
-	case normalizeString(languageTableGenStr):
-		return LanguageTableGen, true
-	case normalizeString(languageTADS3Str):
-		return LanguageTADS3, true
-	case normalizeString(languageTAPStr):
-		return LanguageTAP, true
-	case normalizeString(languageTASMStr):
-		return LanguageTASM, true
-	case normalizeString(languageTclStr):
-		return LanguageTcl, true
-	case normalizeString(languageTcshStr):
-		return LanguageTcsh, true
-	case normalizeString(languageTcshSessionStr):
-		return LanguageTcshSession, true
-	case normalizeString(languageTeaStr):
-		return LanguageTea, true
-	case normalizeString(languageTeraTermStr):
-		return LanguageTeraTerm, true
-	case normalizeString(languageTermcapStr):
-		return LanguageTermcap, true
-	case normalizeString(languageTerminfoStr):
-		return LanguageTerminfo, true
-	case normalizeString(languageTerraStr):
-		return LanguageTerra, true
-	case normalizeString(languageTerraformStr):
-		return LanguageTerraform, true
-	case normalizeString(languageTeXStr):
-		return LanguageTeX, true
-	case normalizeString(languageTexinfoStr):
-		return LanguageTexinfo, true
-	case normalizeString(languageTextStr):
-		return LanguageText, true
-	case normalizeString(languageTextileStr):
-		return LanguageTextile, true
-	case normalizeString(languageThriftStr):
-		return LanguageThrift, true
-	case normalizeString(languageTiddlerStr):
-		return LanguageTiddler, true
-	case normalizeString(languageTIProgramStr):
-		return LanguageTIProgram, true
-	case normalizeString(languageTLAStr):
-		return LanguageTLA, true
-	case normalizeString(languageTNTStr):
-		return LanguageTNT, true
-	case normalizeString(languageTodotxtStr):
-		return LanguageTodotxt, true
-	case normalizeString(languageTOMLStr):
-		return LanguageTOML, true
-	case normalizeString(languageTradingViewStr):
-		return LanguageTradingView, true
-	case normalizeString(languageTrafficScriptStr):
-		return LanguageTrafficScript, true
-	case normalizeString(languageTransactSQLStr):
-		return LanguageTransactSQL, true
-	case normalizeString(languageTSQLStr):
-		return LanguageTransactSQL, true
-	case normalizeString(languageTreetopStr):
-		return LanguageTreetop, true
-	case normalizeString(languageTSVStr):
-		return LanguageTSV, true
-	case normalizeString(languageTSXStr):
-		return LanguageTSX, true
-	case normalizeString(languageTuringStr):
-		return LanguageTuring, true
-	case normalizeString(languageTurtleStr):
-		return LanguageTurtle, true
-	case normalizeString(languageTwigStr):
-		return LanguageTwig, true
-	case normalizeString(languageTXLStr):
-		return LanguageTXL, true
-	case normalizeString(languageTypeLanguageStr):
-		return LanguageTypeLanguage, true
-	case normalizeString(languageTypeScriptStr):
-		return LanguageTypeScript, true
-	case normalizeString(languageTypoScriptStr):
-		return LanguageTypoScript, true
-	case normalizeString(languageUcodeStr):
-		return LanguageUcode, true
-	case normalizeString(languageUniconStr):
-		return LanguageUnicon, true
-	case normalizeString(languageUnifiedParallelCStr):
-		return LanguageUnifiedParallelC, true
-	case normalizeString(languageUnity3DAssetStr):
-		return LanguageUnity3DAsset, true
-	case normalizeString(languageUnixAssemblyStr):
-		return LanguageUnixAssembly, true
-	case normalizeString(languageUnoStr):
-		return LanguageUno, true
-	case normalizeString(languageUnrealScriptStr):
-		return LanguageUnrealScript, true
-	case normalizeString(languageUrbiScriptStr):
-		return LanguageUrbiScript, true
-	case normalizeString(languageUrWebStr):
-		return LanguageUrWeb, true
-	case normalizeString(languageUSDStr):
-		return LanguageUSD, true
-	case normalizeString(languageVStr):
-		return LanguageV, true
-	case normalizeString(languageValaStr):
-		return LanguageVala, true
-	case normalizeString(languageVBStr):
-		return LanguageVB, true
-	case normalizeString(languageVBAStr):
-		return LanguageVBA, true
-	case normalizeString(languageVBNetStr):
-		return LanguageVBNet, true
-	case normalizeString(languageVBScriptStr):
-		return LanguageVBScript, true
-	case normalizeString(languageVCLStr):
-		return LanguageVCL, true
-	case normalizeString(languageVCLSnippetsStr):
-		return LanguageVCLSnippets, true
-	case normalizeString(languageVCTreeStatusStr):
-		return LanguageVCTreeStatus, true
-	case normalizeString(languageVelocityStr):
-		return LanguageVelocity, true
-	case normalizeString(languageVerilogStr):
-		return LanguageVerilog, true
-	case normalizeString(languageVGLStr):
-		return LanguageVGL, true
-	case normalizeString(languageVHDLStr):
-		return LanguageVHDL, true
-	case normalizeString(languageVimHelpFileStr):
-		return LanguageVimHelpFile, true
-	case normalizeString(languageVimLStr):
-		return LanguageVimL, true
-	case normalizeString(languageVimScriptStr):
-		return LanguageVimScript, true
-	case normalizeString(languageVimSnippetStr):
-		return LanguageVimSnippet, true
-	case normalizeString(languageVisualBasicNet):
-		return LanguageVBNet, true
-	case normalizeString(languageVoltStr):
-		return LanguageVolt, true
-	case normalizeString(languageVueJSStr):
-		return LanguageVueJS, true
-	case normalizeString(languageWavefrontMaterialStr):
-		return LanguageWavefrontMaterial, true
-	case normalizeString(languageWavefrontObjectStr):
-		return LanguageWavefrontObject, true
-	case normalizeString(languageWdlStr):
-		return LanguageWdl, true
-	case normalizeString(languageWDTEStr):
-		return LanguageWDTE, true
-	case normalizeString(languageWDiffStr):
-		return LanguageWDiff, true
-	case normalizeString(languageWebAssemblyStr):
-		return LanguageWebAssembly, true
-	case normalizeString(languageWebIDLStr):
-		return LanguageWebIDL, true
-	case normalizeString(languageWebOntologyLanguageStr):
-		return LanguageWebOntologyLanguage, true
-	case normalizeString(languageWebVTTStr):
-		return LanguageWebVTT, true
-	case normalizeString(languageWgetConfigStr):
-		return LanguageWgetConfig, true
-	case normalizeString(languageWhileyStr):
-		return LanguageWhiley, true
-	case normalizeString(languageWindowsRegistryEntriesStr):
-		return LanguageWindowsRegistryEntries, true
-	case normalizeString(languageWispStr):
-		return LanguageWisp, true
-	case normalizeString(languageWollokStr):
-		return LanguageWollok, true
-	case normalizeString(languageWowAddonDataStr):
-		return LanguageWowAddonData, true
-	case normalizeString(languageX10Str):
-		return LanguageX10, true
-	case normalizeString(languageXAMLStr):
-		return LanguageXAML, true
-	case normalizeString(languageXBaseStr):
-		return LanguageXBase, true
-	case normalizeString(languageXBitMapStr):
-		return LanguageXBitMap, true
-	case normalizeString(languageXCStr):
-		return LanguageXC, true
-	case normalizeString(languageXComposeStr):
-		return LanguageXCompose, true
-	case normalizeString(languageXFontDirectoryIndexStr):
-		return LanguageXFontDirectoryIndex, true
-	case normalizeString(languageXMLStr):
-		return LanguageXML, true
-	case normalizeString(languageXMLPropertyListStr):
-		return LanguageXMLPropertyList, true
-	case normalizeString(languageXojoStr):
-		return LanguageXojo, true
-	case normalizeString(languageXorgStr):
-		return LanguageXorg, true
-	case normalizeString(languageXPagesStr):
-		return LanguageXPages, true
-	case normalizeString(languageXPixMapStr):
-		return LanguageXPixMap, true
-	case normalizeString(languageXProcStr):
-		return LanguageXProc, true
-	case normalizeString(languageXQueryStr):
-		return LanguageXQuery, true
-	case normalizeString(languageXSStr):
-		return LanguageXS, true
-	case normalizeString(languageXSLTStr):
-		return LanguageXSLT, true
-	case normalizeString(languageXtendStr):
-		return LanguageXtend, true
-	case normalizeString(languageXtlangStr):
-		return LanguageXtlang, true
-	case normalizeString(languageYaccStr):
-		return LanguageYacc, true
-	case normalizeString(languageYAMLStr):
-		return LanguageYAML, true
-	case normalizeString(languageYANGStr):
-		return LanguageYANG, true
-	case normalizeString(languageYARAStr):
-		return LanguageYARA, true
-	case normalizeString(languageYASnippetStr):
-		return LanguageYASnippet, true
-	case normalizeString(languageZAPStr):
-		return LanguageZAP, true
-	case normalizeString(languageZeekStr):
-		return LanguageZeek, true
-	case normalizeString(languageZenScriptStr):
-		return LanguageZenScript, true
-	case normalizeString(languageZephirStr):
-		return LanguageZephir, true
-	case normalizeString(languageZigStr):
-		return LanguageZig, true
-	case normalizeString(languageZILStr):
-		return LanguageZIL, true
-	case normalizeString(languageZimplStr):
-		return LanguageZimpl, true
-	default:
-		return LanguageUnknown, false
-	}
+	lang, ok := stringToLanguage[normalizeString(s)]
+	return lang, ok
 }
 
 // ParseLanguageFromChroma parses a language from a chroma lexer name.
 // Will return false as second parameter, if language could not be parsed.
-// nolint:gocyclo
 func ParseLanguageFromChroma(lexerName string) (Language, bool) {
-	switch normalizeString(lexerName) {
-	case normalizeString(languageAMPLChromaStr):
-		return LanguageAMPL, true
-	case normalizeString(languageAssemblyChromaStr):
-		return LanguageAssembly, true
-	case normalizeString(languageAutoHotkeyChromaStr):
-		return LanguageAutoHotkey, true
-	case normalizeString(languageCObjdumpChromaStr):
-		return LanguageCObjdump, true
-	case normalizeString(languageColdfusionCFCChromaStr):
-		return LanguageColdfusionCFC, true
-	case normalizeString(languageColdfusionHTMLChromaStr):
-		return LanguageColdfusionHTML, true
-	case normalizeString(languageCppObjdumpChromaStr):
-		return LanguageCppObjdump, true
-	case normalizeString(languageCUDAChromaStr):
-		return LanguageCUDA, true
-	case normalizeString(languageEmacsLispChromaStr):
-		return LanguageEmacsLisp, true
-	case normalizeString(languageGoHTMLTemplateChromaStr):
-		return LanguageGo, true
-	case normalizeString(languageGoTextTemplateChromaStr):
-		return LanguageGo, true
-	case normalizeString(languageFSharpChromaStr):
-		return LanguageFSharp, true
-	case normalizeString(languageHxmlChromaStr):
-		return LanguageHxml, true
-	case normalizeString(languageJSXChromaStr):
-		return LanguageJSX, true
-	case normalizeString(languageLessChromaStr):
-		return LanguageLess, true
-	case normalizeString(languageLiquidChromaStr):
-		return LanguageLiquid, true
-	case normalizeString(languageMakefileChromaStr):
-		return LanguageMakefile, true
-	case normalizeString(languageMarkdownChromaStr):
-		return LanguageMarkdown, true
-	case normalizeString(languageNewLispChromaStr):
-		return LanguageNewLisp, true
-	case normalizeString(languageNimrodChromaStr):
-		return LanguageNimrod, true
-	case normalizeString(languageOocChromaStr):
-		return LanguageOoc, true
-	case normalizeString(languageOrgChromaStr):
-		return LanguageOrg, true
-	case normalizeString(languagePython3ChromaStr):
-		return LanguagePython, true
-	case normalizeString(languageRChromaStr):
-		return LanguageS, true
-	case normalizeString(languageRexxChromaStr):
-		return LanguageRexx, true
-	case normalizeString(languageReasonMLChromaStr):
-		return LanguageReasonML, true
-	case normalizeString(languageREBOLChromaStr):
-		return LanguageREBOL, true
-	case normalizeString(languageSystemVerilogChromaStr):
-		return LanguageSystemVerilog, true
-	case normalizeString(languageTextChromaStr):
-		return LanguageText, true
-	case normalizeString(languageTransactSQLChromaStr):
-		return LanguageTransactSQL, true
-	case normalizeString(languageTypoScriptCSSDataChromaStr):
-		return LanguageTypoScript, true
-	case normalizeString(languageTypoScriptHTMLDataChromaStr):
-		return LanguageTypoScript, true
-	case normalizeString(languageVBNetChromaStr):
-		return LanguageVBNet, true
-	case normalizeString(languageVerilogChromaStr):
-		return LanguageVerilog, true
-	case normalizeString(languageVueJSChromaStr):
-		return LanguageVueJS, true
-	case normalizeString(languageWebIDLChromaStr):
-		return LanguageWebIDL, true
-	default:
-		return ParseLanguage(lexerName)
-	}
-}
+	normalized := normalizeString(lexerName)
 
-// MarshalJSON implements json.Marshaler interface.
-func (l Language) MarshalJSON() ([]byte, error) {
-	if l == LanguageUnknown {
-		return []byte(`null`), nil
+	if lang, ok := chromaToLanguage[normalized]; ok {
+		return lang, true
 	}
 
-	s := l.String()
-	if s == "" {
-		return nil, fmt.Errorf("invalid language %v", l)
-	}
-
-	return []byte(`"` + s + `"`), nil
-}
-
-// UnmarshalJSON implements json.Unmarshaler interface.
-func (l *Language) UnmarshalJSON(v []byte) error {
-	trimmed := strings.Trim(string(v), "\"")
-
-	lang, _ := ParseLanguage(trimmed)
-
-	*l = lang
-
-	return nil
+	return ParseLanguage(lexerName)
 }
 
 // String implements fmt.Stringer interface.
-// nolint:gocyclo
 func (l Language) String() string {
-	switch l {
-	case Language1CEnterprise:
-		return language1CEnterpriseStr
-	case Language4D:
-		return language4DStr
-	case LanguageABAP:
-		return languageABAPStr
-	case LanguageABNF:
-		return languageABNFStr
-	case LanguageAda:
-		return languageAdaStr
-	case LanguageADL:
-		return languageADLStr
-	case LanguageAdobeFontMetrics:
-		return languageAdobeFontMetricsStr
-	case LanguageAdvPL:
-		return languageAdvPLStr
-	case LanguageActionScript:
-		return languageActionScriptStr
-	case LanguageActionScript3:
-		return languageActionScript3Str
-	case LanguageAgda:
-		return languageAgdaStr
-	case LanguageAGSScript:
-		return languageAGSScriptStr
-	case LanguageAheui:
-		return languageAheuiStr
-	case LanguageAL:
-		return languageALStr
-	case LanguageAlloy:
-		return languageAlloyStr
-	case LanguageAlpineAbuild:
-		return languageAlpineAbuildStr
-	case LanguageAltiumDesigner:
-		return languageAltiumDesignerStr
-	case LanguageAmbientTalk:
-		return languageAmbientTalkStr
-	case LanguageAMPL:
-		return languageAMPLStr
-	case LanguageAngelScript:
-		return languageAngelScriptStr
-	case LanguageAngular2:
-		return languageAngular2Str
-	case LanguageAnsible:
-		return languageAnsibleStr
-	case LanguageAntBuildSystem:
-		return languageAntBuildSystemStr
-	case LanguageANTLR:
-		return languageANTLRStr
-	case LanguageApacheConfig:
-		return languageApacheConfigStr
-	case LanguageApex:
-		return languageApexStr
-	case LanguageAPIBlueprint:
-		return languageAPIBlueprintStr
-	case LanguageAPL:
-		return languageAPLStr
-	case LanguageApolloGuidanceComputer:
-		return languageApolloGuidanceComputerStr
-	case LanguageAppleScript:
-		return languageAppleScriptStr
-	case LanguageArc:
-		return languageArcStr
-	case LanguageArduino:
-		return languageArduinoStr
-	case LanguageArrow:
-		return languageArrowStr
-	case LanguageASCIIDoc:
-		return languageASCIIDocStr
-	case LanguageASL:
-		return languageASLStr
-	case LanguageASN1:
-		return languageASN1Str
-	case LanguageASPDotNet:
-		return languageASPDotNetStr
-	case LanguageAspectJ:
-		return languageAspectJStr
-	case LanguageAspxCSharp:
-		return languageAspxCSharpStr
-	case LanguageAspxVBNet:
-		return languageAspxVBNetStr
-	case LanguageAssembly:
-		return languageAssemblyStr
-	case LanguageAsymptote:
-		return languageAsymptoteStr
-	case LanguageATS:
-		return languageATSStr
-	case LanguageAugeas:
-		return languageAugeasStr
-	case LanguageAutoconf:
-		return languageAutoconfStr
-	case LanguageAutoHotkey:
-		return languageAutoHotkeyStr
-	case LanguageAutoIt:
-		return languageAutoItStr
-	case LanguageAvroIDL:
-		return languageAvroIDLStr
-	case LanguageAwk:
-		return languageAwkStr
-	case LanguageBallerina:
-		return languageBallerinaStr
-	case LanguageBARE:
-		return languageBAREStr
-	case LanguageBash:
-		return languageBashStr
-	case LanguageBashSession:
-		return languageBashSessionStr
-	case LanguageBasic:
-		return languageBasicStr
-	case LanguageBatchfile:
-		return languageBatchfileStr
-	case LanguageBBCBasic:
-		return languageBBCBasicStr
-	case LanguageBBCode:
-		return languageBBCodeStr
-	case LanguageBC:
-		return languageBCStr
-	case LanguageBeef:
-		return languageBeefStr
-	case LanguageBefunge:
-		return languageBefungeStr
-	case LanguageBibTeX:
-		return languageBibTeXStr
-	case LanguageBison:
-		return languageBisonStr
-	case LanguageBitBake:
-		return languageBitBakeStr
-	case LanguageBlade:
-		return languageBladeStr
-	case LanguageBladeTemplate:
-		return languageBladeTemplateStr
-	case LanguageBlazor:
-		return languageBlazorStr
-	case LanguageBlitzBasic:
-		return languageBlitzBasicStr
-	case LanguageBlitzMax:
-		return languageBlitzMaxStr
-	case LanguageBluespec:
-		return languageBluespecStr
-	case LanguageBNF:
-		return languageBNFStr
-	case LanguageBoa:
-		return languageBoaStr
-	case LanguageBoo:
-		return languageBooStr
-	case LanguageBoogie:
-		return languageBoogieStr
-	case LanguageBrainfuck:
-		return languageBrainfuckStr
-	case LanguageBrightScript:
-		return languageBrightScriptStr
-	case LanguageBro:
-		return languageBroStr
-	case LanguageBrowserslist:
-		return languageBrowserslistStr
-	case LanguageBST:
-		return languageBSTStr
-	case LanguageBUGS:
-		return languageBUGSStr
-	case LanguageC:
-		return languageCStr
-	case LanguageC2hsHaskell:
-		return languageC2hsHaskellStr
-	case LanguageCa65Assembler:
-		return languageCa65AssemblerStr
-	case LanguageCabalConfig:
-		return languageCabalConfigStr
-	case LanguageCaddyfile:
-		return languageCaddyfileStr
-	case LanguageCaddyfileDirectives:
-		return languageCaddyfileDirectivesStr
-	case LanguageCADL:
-		return languageCADLStr
-	case LanguageCAmkES:
-		return languageCAmkESStr
-	case LanguageCapDL:
-		return languageCapDLStr
-	case LanguageCapNProto:
-		return languageCapNProtoStr
-	case LanguageCartoCSS:
-		return languageCartoCSSStr
-	case LanguageCassandraCQL:
-		return languageCassandraCQLStr
-	case LanguageCBMBasicV2:
-		return languageCBMBasicV2Str
-	case LanguageCeylon:
-		return languageCeylonStr
-	case LanguageCFEngine3:
-		return languageCFEngine3Str
-	case LanguageCfstatement:
-		return languageCfstatementStr
-	case LanguageChaiScript:
-		return languageChaiScriptStr
-	case LanguageChapel:
-		return languageChapelStr
-	case LanguageCharity:
-		return languageCharityStr
-	case LanguageCharmci:
-		return languageCharmciStr
-	case LanguageCheetah:
-		return languageCheetahStr
-	case LanguageChucK:
-		return languageChucKStr
-	case LanguageCirru:
-		return languageCirruStr
-	case LanguageClarion:
-		return languageClarionStr
-	case LanguageClassicASP:
-		return languageClassicASPStr
-	case LanguageClay:
-		return languageClayStr
-	case LanguageClean:
-		return languageCleanStr
-	case LanguageClick:
-		return languageClickStr
-	case LanguageCLIPS:
-		return languageCLIPSStr
-	case LanguageClojure:
-		return languageClojureStr
-	case LanguageClojureScript:
-		return languageClojureScriptStr
-	case LanguageClosureTemplates:
-		return languageClosureTemplatesStr
-	case LanguageCloudFirestoreSecurityRules:
-		return languageCloudFirestoreSecurityRulesStr
-	case LanguageCMake:
-		return languageCMakeStr
-	case LanguageCObjdump:
-		return languageCObjdumpStr
-	case LanguageCOBOL:
-		return languageCOBOLStr
-	case LanguageCOBOLFree:
-		return languageCOBOLFreeStr
-	case LanguageCocoa:
-		return languageCocoaStr
-	case LanguageCodeQL:
-		return languageCodeQLStr
-	case LanguageCoffeeScript:
-		return languageCoffeeScriptStr
-	case LanguageColdfusionCFC:
-		return languageColdfusionCFCStr
-	case LanguageColdfusionHTML:
-		return languageColdfusionHTMLStr
-	case LanguageCOLLADA:
-		return languageCOLLADAStr
-	case LanguageCommonLisp:
-		return languageCommonLispStr
-	case LanguageCommonWorkflowLanguage:
-		return languageCommonWorkflowLanguageStr
-	case LanguageComponentPascal:
-		return languageComponentPascalStr
-	case LanguageConfig:
-		return languageConfigStr
-	case LanguageCoNLLU:
-		return languageCoNLLUStr
-	case LanguageCool:
-		return languageCoolStr
-	case LanguageCoq:
-		return languageCoqStr
-	case LanguageCPerl:
-		return languageCPerlStr
-	case LanguageCPP:
-		return languageCPPStr
-	case LanguageCppObjdump:
-		return languageCppObjdumpStr
-	case LanguageCPSA:
-		return languageCPSAStr
-	case LanguageCreole:
-		return languageCreoleStr
-	case LanguageCrmsh:
-		return languageCrmshStr
-	case LanguageCroc:
-		return languageCrocStr
-	case LanguageCrontab:
-		return languageCrontabStr
-	case LanguageCryptol:
-		return languageCryptolStr
-	case LanguageCrystal:
-		return languageCrystalStr
-	case LanguageCSharp:
-		return languageCSharpStr
-	case LanguageCSHTML:
-		return languageCSHTMLStr
-	case LanguageCSON:
-		return languageCSONStr
-	case LanguageCsound:
-		return languageCsoundStr
-	case LanguageCsoundDocument:
-		return languageCsoundDocumentStr
-	case LanguageCsoundOrchestra:
-		return languageCsoundOrchestraStr
-	case LanguageCsoundScore:
-		return languageCsoundScoreStr
-	case LanguageCSS:
-		return languageCSSStr
-	case LanguageCSV:
-		return languageCSVStr
-	case LanguageCUDA:
-		return languageCUDAStr
-	case LanguagecURLConfig:
-		return languagecURLConfigStr
-	case LanguageCVS:
-		return languageCVSStr
-	case LanguageCWeb:
-		return languageCWebStr
-	case LanguageCycript:
-		return languageCycriptStr
-	case LanguageCypher:
-		return languageCypherStr
-	case LanguageCython:
-		return languageCythonStr
-	case LanguageD:
-		return languageDStr
-	case LanguageDafny:
-		return languageDafnyStr
-	case LanguageDarcsPatch:
-		return languageDarcsPatchStr
-	case LanguageDart:
-		return languageDartStr
-	case LanguageDataWeave:
-		return languageDataWeaveStr
-	case LanguageDASM16:
-		return languageDASM16Str
-	case LanguageDCL:
-		return languageDCLStr
-	case LanguageDCPU16Asm:
-		return languageDCPU16AsmStr
-	case LanguageDebianControlFile:
-		return languageDebianControlFileStr
-	case LanguageDelphi:
-		return languageDelphiStr
-	case LanguageDesktop:
-		return languageDesktopStr
-	case LanguageDevicetree:
-		return languageDevicetreeStr
-	case LanguageDG:
-		return languageDGStr
-	case LanguageDhall:
-		return languageDhallStr
-	case LanguageDiff:
-		return languageDiffStr
-	case LanguageDigitalCommand:
-		return languageDigitalCommandStr
-	case LanguageDircolors:
-		return languageDircolorsStr
-	case LanguageDirectX3DFile:
-		return languageDirectX3DFileStr
-	case LanguageDjangoJinja:
-		return languageDjangoJinjaStr
-	case LanguageDM:
-		return languageDMStr
-	case LanguageDNSZone:
-		return languageDNSZoneStr
-	case LanguageDObjdump:
-		return languageDObjdumpStr
-	case LanguageDocker:
-		return languageDockerStr
-	case LanguageDockerfile:
-		return languageDockerfileStr
-	case LanguageDocTeX:
-		return languageDocTeXStr
-	case LanguageDocumentation:
-		return languageDocumentationStr
-	case LanguageDogescript:
-		return languageDogescriptStr
-	case LanguageDTD:
-		return languageDTDStr
-	case LanguageDTrace:
-		return languageDTraceStr
-	case LanguageDuel:
-		return languageDuelStr
-	case LanguageDylan:
-		return languageDylanStr
-	case LanguageDylanLID:
-		return languageDylanLIDStr
-	case LanguageDylanSession:
-		return languageDylanSessionStr
-	case LanguageDynASM:
-		return languageDynASMStr
-	case LanguageE:
-		return languageEStr
-	case LanguageEagle:
-		return languageEagleStr
-	case LanguageEarlGrey:
-		return languageEarlGreyStr
-	case LanguageEasybuild:
-		return languageEasybuildStr
-	case LanguageEasytrieve:
-		return languageEasytrieveStr
-	case LanguageEBNF:
-		return languageEBNFStr
-	case LanguageEC:
-		return languageECStr
-	case LanguageEcereProjects:
-		return languageEcereProjectsStr
-	case LanguageECL:
-		return languageECLStr
-	case LanguageEclipse:
-		return languageEclipseStr
-	case LanguageEditorConfig:
-		return languageEditorConfigStr
-	case LanguageEdjeDataCollection:
-		return languageEdjeDataCollectionStr
-	case LanguageEdn:
-		return languageEdnStr
-	case LanguageEiffel:
-		return languageEiffelStr
-	case LanguageEJS:
-		return languageEJSStr
-	case LanguageElixir:
-		return languageElixirStr
-	case LanguageElixirIexSession:
-		return languageElixirIexSessionStr
-	case LanguageElm:
-		return languageElmStr
-	case LanguageEmacsLisp:
-		return languageEmacsLispStr
-	case LanguageEMail:
-		return languageEMailStr
-	case LanguageEmberScript:
-		return languageEmberScriptStr
-	case LanguageEML:
-		return languageEMLStr
-	case LanguageEQ:
-		return languageEQStr
-	case LanguageERB:
-		return languageERBStr
-	case LanguageErlang:
-		return languageErlangStr
-	case LanguageErlangErlSession:
-		return languageErlangErlSessionStr
-	case LanguageEshell:
-		return languageEshellStr
-	case LanguageEvoque:
-		return languageEvoqueStr
-	case LanguageExecline:
-		return languageExeclineStr
-	case LanguageEzhil:
-		return languageEzhilStr
-	case LanguageFactor:
-		return languageFactorStr
-	case LanguageFancy:
-		return languageFancyStr
-	case LanguageFantom:
-		return languageFantomStr
-	case LanguageFaust:
-		return languageFaustStr
-	case LanguageFelix:
-		return languageFelixStr
-	case LanguageFennel:
-		return languageFennelStr
-	case LanguageFIGletFont:
-		return languageFIGletFontStr
-	case LanguageFilebenchWML:
-		return languageFilebenchWMLStr
-	case LanguageFilterscript:
-		return languageFilterscriptStr
-	case LanguageFlatline:
-		return languageFlatlineStr
-	case LanguageFloScript:
-		return languageFloScriptStr
-	case LanguageFish:
-		return languageFishStr
-	case LanguageFLUX:
-		return languageFLUXStr
-	case LanguageFont:
-		return languageFontStr
-	case LanguageFormatted:
-		return languageFormattedStr
-	case LanguageForth:
-		return languageForthStr
-	case LanguageFortran:
-		return languageFortranStr
-	case LanguageFortranFixed:
-		return languageFortranFixedStr
-	case LanguageFortranFreeForm:
-		return languageFortranFreeFormStr
-	case LanguageFSharp:
-		return languageFSharpStr
-	case LanguageFoxPro:
-		return languageFoxProStr
-	case LanguageFreefem:
-		return languageFreefemStr
-	case LangauageFreeMarker:
-		return langauageFreeMarkerStr
-	case LangauageFrege:
-		return langauageFregeStr
-	case LanguageFuthark:
-		return languageFutharkStr
-	case LanguageFStar:
-		return languageFStarStr
-	case LanguageGameMakerLanguage:
-		return languageGameMakerLanguageStr
-	case LanguageGAML:
-		return languageGAMLStr
-	case LanguageGAMS:
-		return languageGAMSStr
-	case LanguageGap:
-		return languageGapStr
-	case LanguageGas:
-		return languageGasStr
-	case LanguageGCCMachineDescription:
-		return languageGCCMachineDescriptionStr
-	case LanguageGCode:
-		return languageGCodeStr
-	case LanguageGDB:
-		return languageGDBStr
-	case LanguageGDScript:
-		return languageGDScriptStr
-	case LanguageGEDCOM:
-		return languageGEDCOMStr
-	case LanguageGenie:
-		return languageGenieStr
-	case LanguageGenshi:
-		return languageGenshiStr
-	case LanguageGenshiHTML:
-		return languageGenshiHTMLStr
-	case LanguageGenshiText:
-		return languageGenshiTextStr
-	case LanguageGentooEbuild:
-		return languageGentooEbuildStr
-	case LanguageGentooEclass:
-		return languageGentooEclassStr
-	case LanguageGerberImage:
-		return languageGerberImageStr
-	case LanguageGettextCatalog:
-		return languageGettextCatalogStr
-	case LanguageGherkin:
-		return languageGherkinStr
-	case LanguageGDNative:
-		return languageGDNativeStr
-	case LanguageGit:
-		return languageGitStr
-	case LanguageGitAttributes:
-		return languageGitAttributesStr
-	case LanguageGitConfig:
-		return languageGitConfigStr
-	case LanguageGLSL:
-		return languageGLSLStr
-	case LanguageGlyph:
-		return languageGlyphStr
-	case LanguageGlyphBitmap:
-		return languageGlyphBitmapStr
-	case LanguageGN:
-		return languageGNStr
-	case LanguageGnuplot:
-		return languageGnuplotStr
-	case LanguageGo, LanguageGoHTMLTemplate, LanguageGoTextTemplate:
-		return languageGoStr
-	case LanguageGolo:
-		return languageGoloStr
-	case LanguageGoodDataCL:
-		return languageGoodDataCLStr
-	case LanguageGosu:
-		return languageGosuStr
-	case LanguageGosuTemplate:
-		return languageGosuTemplateStr
-	case LanguageGrace:
-		return languageGraceStr
-	case LanguageGradle:
-		return languageGradleStr
-	case LanguageGradleConfig:
-		return languageGradleConfigStr
-	case LanguageGrammaticalFramework:
-		return languageGrammaticalFrameworkStr
-	case LanguageGraphModelingLanguage:
-		return languageGraphModelingLanguageStr
-	case LanguageGraphQL:
-		return languageGraphQLStr
-	case LanguageGraphvizDOT:
-		return languageGraphvizDOTStr
-	case LanguageGroff:
-		return languageGroffStr
-	case LanguageGroovy:
-		return languageGroovyStr
-	case LanguageGroovyServerPages:
-		return languageGroovyServerPagesStr
-	case LanguageHack:
-		return languageHackStr
-	case LanguageHaml:
-		return languageHamlStr
-	case LanguageHandlebars:
-		return languageHandlebarsStr
-	case LanguageHAProxy:
-		return languageHAProxyStr
-	case LanguageHarbour:
-		return languageHarbourStr
-	case LanguageHaskell:
-		return languageHaskellStr
-	case LanguageHaxe:
-		return languageHaxeStr
-	case LanguageHCL:
-		return languageHCLStr
-	case LanguageHexdump:
-		return languageHexdumpStr
-	case LanguageHiveQL:
-		return languageHiveQLStr
-	case LanguageHLB:
-		return languageHLBStr
-	case LanguageHLSL:
-		return languageHLSLStr
-	case LanguageHolyC:
-		return languageHolyCStr
-	case LanguageHSAIL:
-		return languageHSAILStr
-	case LanguageHspec:
-		return languageHspecStr
-	case LanguageHTML:
-		return languageHTMLStr
-	case LanguageHTMLDjango:
-		return languageHTMLDjangoStr
-	case LanguageHTMLECR:
-		return languageHTMLECRStr
-	case LanguageHTMLEEX:
-		return languageHTMLEEXStr
-	case LanguageHTMLERB:
-		return languageHTMLERBStr
-	case LanguageHTMLPHP:
-		return languageHTMLPHPStr
-	case LanguageHTMLRazor:
-		return languageHTMLRazorStr
-	case LanguageHTTP:
-		return languageHTTPStr
-	case LanguageHxml:
-		return languageHxmlStr
-	case LanguageHy:
-		return languageHyStr
-	case LanguageHybris:
-		return languageHybrisStr
-	case LanguageHyPhy:
-		return languageHyPhyStr
-	case LanguageIcon:
-		return languageIconStr
-	case LanguageIDL:
-		return languageIDLStr
-	case LanguageIdris:
-		return languageIdrisStr
-	case LanguageIgnoreList:
-		return languageIgnoreListStr
-	case LanguageIgor:
-		return languageIgorStr
-	case LanguageIGORPro:
-		return languageIGORProStr
-	case LanguageImageJMacro:
-		return languageImageJMacroStr
-	case LanguageImageJPEG:
-		return languageImageJPEGStr
-	case LanguageImagePNG:
-		return languageImagePNGStr
-	case LanguageInform6:
-		return languageInform6Str
-	case LanguageInform6Template:
-		return languageInform6TemplateStr
-	case LanguageInform7:
-		return languageInform7Str
-	case LanguageINI:
-		return languageINIStr
-	case LanguageInnoSetup:
-		return languageInnoSetupStr
-	case LanguageIo:
-		return languageIoStr
-	case LanguageIoke:
-		return languageIokeStr
-	case LanguageIRCLogs:
-		return languageIRCLogsStr
-	case LanguageIsabelle:
-		return languageIsabelleStr
-	case LanguageIsabelleRoot:
-		return languageIsabelleRootStr
-	case LanguageJ:
-		return languageJStr
-	case LanguageJAGS:
-		return languageJAGSStr
-	case LanguageJade:
-		return languageJadeStr
-	case LanguageJasmin:
-		return languageJasminStr
-	case LanguageJava:
-		return languageJavaStr
-	case LanguageJavaProperties:
-		return languageJavaPropertiesStr
-	case LanguageJavaScript:
-		return languageJavaScriptStr
-	case LanguageJavaScriptERB:
-		return languageJavaScriptERBStr
-	case LanguageJCL:
-		return languageJCLStr
-	case LanguageJFlex:
-		return languageJFlexStr
-	case LanguageJison:
-		return languageJisonStr
-	case LanguageJisonLex:
-		return languageJisonLexStr
-	case LanguageJolie:
-		return languageJolieStr
-	case LanguageJSGF:
-		return languageJSGFStr
-	case LanguageJSON:
-		return languageJSONStr
-	case LanguageJSON5:
-		return languageJSON5Str
-	case LanguageJSONiq:
-		return languageJSONiqStr
-	case LanguageJSONLD:
-		return languageJSONLDStr
-	case LanguageJsonnet:
-		return languageJsonnetStr
-	case LanguageJSONWithComments:
-		return languageJSONWithCommentsStr
-	case LanguageJSP:
-		return languageJSPStr
-	case LanguageJSX:
-		return languageJSXStr
-	case LanguageJulia:
-		return languageJuliaStr
-	case LanguageJuliaConsole:
-		return languageJuliaConsoleStr
-	case LanguageJungle:
-		return languageJungleStr
-	case LanguageJupyterNotebook:
-		return languageJupyterNotebookStr
-	case LanguageJuttle:
-		return languageJuttleStr
-	case LanguageKaitai:
-		return languageKaitaiStr
-	case LanguageKal:
-		return languageKalStr
-	case LanguageKconfig:
-		return languageKconfigStr
-	case LanguageKernelLog:
-		return languageKernelLogStr
-	case LanguageKiCadLayout:
-		return languageKiCadLayoutStr
-	case LanguageKiCadLegacyLayout:
-		return languageKiCadLegacyLayoutStr
-	case LanguageKiCadSchematic:
-		return languageKiCadSchematicStr
-	case LanguageKit:
-		return languageKitStr
-	case LanguageKoka:
-		return languageKokaStr
-	case LanguageKotlin:
-		return languageKotlinStr
-	case LanguageKRL:
-		return languageKRLStr
-	case LanguageLabVIEW:
-		return languageLabVIEWStr
-	case LanguageLaravelTemplate:
-		return languageLaravelTemplateStr
-	case LanguageLark:
-		return languageLarkStr
-	case LanguageLasso:
-		return languageLassoStr
-	case LanguageLaTeX:
-		return languageLaTeXStr
-	case LanguageLatte:
-		return languageLatteStr
-	case LanguageLean:
-		return languageLeanStr
-	case LanguageLess:
-		return languageLessStr
-	case LanguageLex:
-		return languageLexStr
-	case LanguageLFE:
-		return languageLFEStr
-	case LanguageLighttpd:
-		return languageLighttpdStr
-	case LanguageLilyPond:
-		return languageLilyPondStr
-	case LanguageLimbo:
-		return languageLimboStr
-	case LanguageLinkerScript:
-		return languageLinkerScriptStr
-	case LanguageLinuxKernelModule:
-		return languageLinuxKernelModuleStr
-	case LanguageLiquid:
-		return languageLiquidStr
-	case LanguageLiterateAgda:
-		return languageLiterateAgdaStr
-	case LanguageLiterateCoffeeScript:
-		return languageLiterateCoffeeScriptStr
-	case LanguageLiterateCryptol:
-		return languageLiterateCryptolStr
-	case LanguageLiterateHaskell:
-		return languageLiterateHaskellStr
-	case LanguageLiterateIdris:
-		return languageLiterateIdrisStr
-	case LanguageLiveScript:
-		return languageLiveScriptStr
-	case LanguageLLVM:
-		return languageLLVMStr
-	case LanguageLLVMMIR:
-		return languageLLVMMIRStr
-	case LanguageLLVMMIRBody:
-		return languageLLVMMIRBodyStr
-	case LanguageLogos:
-		return languageLogosStr
-	case LanguageLogFile:
-		return languageLogFileStr
-	case LanguageLogtalk:
-		return languageLogtalkStr
-	case LanguageLOLCODE:
-		return languageLOLCODEStr
-	case LanguageLookML:
-		return languageLookMLStr
-	case LanguageLoomScript:
-		return languageLoomScriptStr
-	case LanguageLSL:
-		return languageLSLStr
-	case LanguageLTspiceSymbol:
-		return languageLTspiceSymbolStr
-	case LanguageLua:
-		return languageLuaStr
-	case LanguageMakefile:
-		return languageMakefileStr
-	case LanguageMako:
-		return languageMakoStr
-	case LanguageMan:
-		return languageManStr
-	case LanguageMAQL:
-		return languageMAQLStr
-	case LanguageMarkdown:
-		return languageMarkdownStr
-	case LanguageMarko:
-		return languageMarkoStr
-	case LanguageMask:
-		return languageMaskStr
-	case LanguageMason:
-		return languageMasonStr
-	case LanguageMathematica:
-		return languageMathematicaStr
-	case LanguageMatlab:
-		return languageMatlabStr
-	case LanguageMatlabSession:
-		return languageMatlabSessionStr
-	case LanguageMax:
-		return languageMaxStr
-	case LanguageMaxMSP:
-		return languageMaxMSPStr
-	case LanguageMeson:
-		return languageMesonStr
-	case LanguageMetafont:
-		return languageMetafontStr
-	case LanguageMetapost:
-		return languageMetapostStr
-	case LanguageMIME:
-		return languageMIMEStr
-	case LanguageMiniD:
-		return languageMiniDStr
-	case LanguageMiniScript:
-		return languageMiniScriptStr
-	case LanguageMiniZinc:
-		return languageMiniZincStr
-	case LanguageMirah:
-		return languageMirahStr
-	case LanguageMLIR:
-		return languageMLIRStr
-	case LanguageModelica:
-		return languageModelicaStr
-	case LanguageModula2:
-		return languageModula2Str
-	case LanguageMoinWiki:
-		return languageMoinWikiStr
-	case LanguageMonkey:
-		return languageMonkeyStr
-	case LanguageMonkeyC:
-		return languageMonkeyCStr
-	case LanguageMonte:
-		return languageMonteStr
-	case LanguageMOOCode:
-		return languageMOOCodeStr
-	case LanguageMoonScript:
-		return languageMoonScriptStr
-	case LanguageMorrowindScript:
-		return languageMorrowindScriptStr
-	case LanguageMosel:
-		return languageMoselStr
-	case LanguageMozPreprocHash:
-		return languageMozPreprocHashStr
-	case LanguageMozPreprocPercent:
-		return languageMozPreprocPercentStr
-	case LanguageMQL:
-		return languageMQLStr
-	case LanguageMscgen:
-		return languageMscgenStr
-	case LanguageMSDOSSession:
-		return languageMSDOSSessionStr
-	case LanguageMuPAD:
-		return languageMuPADStr
-	case LanguageMXML:
-		return languageMXMLStr
-	case LanguageMyghty:
-		return languageMyghtyStr
-	case LanguageMySQL:
-		return languageMySQLStr
-	case LanguageMustache:
-		return languageMustacheStr
-	case LanguageNASM:
-		return languageNASMStr
-	case LanguageNCL:
-		return languageNCLStr
-	case LanguageNemerle:
-		return languageNemerleStr
-	case LanguageNeon:
-		return languageNeonStr
-	case LanguageNesC:
-		return languageNesCStr
-	case LanguageNewLisp:
-		return languageNewLispStr
-	case LanguageNewspeak:
-		return languageNewspeakStr
-	case LanguageNginx:
-		return languageNginxStr
-	case LanguageNginxConfig:
-		return languageNginxConfigStr
-	case LanguageNimrod:
-		return languageNimrodStr
-	case LanguageNit:
-		return languageNitStr
-	case LanguageNix:
-		return languageNixStr
-	case LanguageNotmuch:
-		return languageNotmuchStr
-	case LanguageNSIS:
-		return languageNSISStr
-	case LanguageNu:
-		return languageNuStr
-	case LanguageNumPy:
-		return languageNumPyStr
-	case LanguageNuSMV:
-		return languageNuSMVStr
-	case LanguageNASMObjdump:
-		return languageNASMObjdumpStr
-	case LanguageObjdump:
-		return languageObjdumpStr
-	case LanguageObjectiveC:
-		return languageObjectiveCStr
-	case LanguageObjectiveCPP:
-		return languageObjectiveCPPStr
-	case LanguageObjectiveJ:
-		return languageObjectiveJStr
-	case LanguageOCaml:
-		return languageOCamlStr
-	case LanguageOctave:
-		return languageOctaveStr
-	case LanguageODIN:
-		return languageODINStr
-	case LanguageOoc:
-		return languageOocStr
-	case LanguageOpa:
-		return languageOpaStr
-	case LanguageOpenEdgeABL:
-		return languageOpenEdgeABLStr
-	case LanguageOpenSCAD:
-		return languageOpenSCADStr
-	case LanguageOrg:
-		return languageOrgStr
-	case LanguagePacmanConf:
-		return languagePacmanConfStr
-	case LanguagePan:
-		return languagePanStr
-	case LanguageParaSail:
-		return languageParaSailStr
-	case LanguageParrot:
-		return languageParrotStr
-	case LanguagePascal:
-		return languagePascalStr
-	case LanguagePawn:
-		return languagePawnStr
-	case LanguagePEG:
-		return languagePEGStr
-	case LanguagePerl:
-		return languagePerlStr
-	case LanguagePerl6:
-		return languagePerl6Str
-	case LanguagePHTML:
-		return languagePHTMLStr
-	case LanguagePHP:
-		return languagePHPStr
-	case LanguagePig:
-		return languagePigStr
-	case LanguagePike:
-		return languagePikeStr
-	case LanguagePkgConfig:
-		return languagePkgConfigStr
-	case LanguagePLpgSQL:
-		return languagePLpgSQLStr
-	case LanguagePointless:
-		return languagePointlessStr
-	case LanguagePony:
-		return languagePonyStr
-	case LanguagePostgres:
-		return languagePostgresStr
-	case LanguagePostgresConsole:
-		return languagePostgresConsoleStr
-	case LanguagePostScript:
-		return languagePostScriptStr
-	case LanguagePOVRay:
-		return languagePOVRayStr
-	case LanguagePowerShell:
-		return languagePowerShellStr
-	case LanguagePowerShellSession:
-		return languagePowerShellSessionStr
-	case LanguagePraat:
-		return languagePraatStr
-	case LanguageProlog:
-		return languagePrologStr
-	case LanguagePromQL:
-		return languagePromQLStr
-	case LanguagePropertiesJava:
-		return languagePropertiesJavaStr
-	case LanguageProtocolBuffer:
-		return languageProtocolBufferStr
-	case LanguagePsyShPHP:
-		return languagePsyShPHPStr
-	case LanguagePug:
-		return languagePugStr
-	case LanguagePuppet:
-		return languagePuppetStr
-	case LanguagePureData:
-		return languagePureDataStr
-	case LanguagePureScript:
-		return languagePureScriptStr
-	case LanguagePyPyLog:
-		return languagePyPyLogStr
-	case LanguagePython:
-		return languagePythonStr
-	case LanguagePython2:
-		return languagePython2Str
-	case LanguagePython2Traceback:
-		return languagePython2TracebackStr
-	case LanguagePythonConsole:
-		return languagePythonConsoleStr
-	case LanguagePythonTraceback:
-		return languagePythonTracebackStr
-	case LanguageQBasic:
-		return languageQBasicStr
-	case LanguageQML:
-		return languageQMLStr
-	case LanguageQVTO:
-		return languageQVTOStr
-	case LanguageR:
-		return languageRStr
-	case LanguageRacket:
-		return languageRacketStr
-	case LanguageRagel:
-		return languageRagelStr
-	case LanguageRagelEmbedded:
-		return languageRagelEmbeddedStr
-	case LanguageRaku:
-		return languageRakuStr
-	case LanguageRAML:
-		return languageRAMLStr
-	case LanguageRascal:
-		return languageRascalStr
-	case LanguageRawToken:
-		return languageRawTokenStr
-	case LanguageRConsole:
-		return languageRConsoleStr
-	case LanguageRd:
-		return languageRdStr
-	case LanguageRDoc:
-		return languageRDocStr
-	case LanguageReadlineConfig:
-		return languageReadlineConfigStr
-	case LanguageREALbasic:
-		return languageREALbasicStr
-	case LanguageReasonML:
-		return languageReasonMLStr
-	case LanguageREBOL:
-		return languageREBOLStr
-	case LanguageRecordJar:
-		return languageRecordJarStr
-	case LanguageRed:
-		return languageRedStr
-	case LanguageRedcode:
-		return languageRedcodeStr
-	case LanguageRegistry:
-		return languageRegistryStr
-	case LanguageRegularExpression:
-		return languageRegularExpressionStr
-	case LanguageRenderScript:
-		return languageRenderScriptStr
-	case LanguageRenPy:
-		return languageRenPyStr
-	case LanguageReScript:
-		return languageReScriptStr
-	case LanguageResourceBundle:
-		return languageResourceBundleStr
-	case LanguageReStructuredText:
-		return languageReStructuredTextStr
-	case LanguageRexx:
-		return languageRexxStr
-	case LanguageRHTML:
-		return languageRHTMLStr
-	case LanguageRichTextFormat:
-		return languageRichTextFormatStr
-	case LanguageRide:
-		return languageRideStr
-	case LanguageRing:
-		return languageRingStr
-	case LanguageRiot:
-		return languageRiotStr
-	case LanguageRMarkdown:
-		return languageRMarkdownStr
-	case LanguageRNGCompact:
-		return languageRNGCompactStr
-	case LanguageRoboconfGraph:
-		return languageRoboconfGraphStr
-	case LanguageRoboconfInstances:
-		return languageRoboconfInstancesStr
-	case LanguageRobotFramework:
-		return languageRobotFrameworkStr
-	case LanguageRoff:
-		return languageRoffStr
-	case LanguageRoffManpage:
-		return languageRoffManpageStr
-	case LanguageRouge:
-		return languageRougeStr
-	case LanguageRPC:
-		return languageRPCStr
-	case LanguageRPMSpec:
-		return languageRPMSpecStr
-	case LanguageRQL:
-		return languageRQLStr
-	case LanguageRSL:
-		return languageRSLStr
-	case LanguageRuby:
-		return languageRubyStr
-	case LanguageRubyIRBSession:
-		return languageRubyIRBSessionStr
-	case LanguageRUNOFF:
-		return languageRUNOFFStr
-	case LanguageRust:
-		return languageRustStr
-	case LanguageS:
-		return languageSStr
-	case LanguageSage:
-		return languageSageStr
-	case LanguageSalt:
-		return languageSaltStr
-	case LanguageSARL:
-		return languageSARLStr
-	case LanguageSAS:
-		return languageSASStr
-	case LanguageSass:
-		return languageSassStr
-	case LanguageScala:
-		return languageScalaStr
-	case LanguageScaml:
-		return languageScamlStr
-	case LanguageScdoc:
-		return languageScdocStr
-	case LanguageScheme:
-		return languageSchemeStr
-	case LanguageScilab:
-		return languageScilabStr
-	case LanguageScribe:
-		return languageScribeStr
-	case LanguageSCSS:
-		return languageSCSSStr
-	case LanguageSed:
-		return languageSedStr
-	case LanguageSelf:
-		return languageSelfStr
-	case LanguageSGML:
-		return languageSGMLStr
-	case LanguageShaderLab:
-		return languageShaderLabStr
-	case LanguageShell:
-		return languageShellStr
-	case LanguageShellSession:
-		return languageShellSessionStr
-	case LanguageShen:
-		return languageShenStr
-	case LanguageShExC:
-		return languageShExCStr
-	case LanguageSingularity:
-		return languageSingularityStr
-	case LanguageSieve:
-		return languageSieveStr
-	case LanguageSilver:
-		return languageSilverStr
-	case LanguageSimula:
-		return languageSimulaStr
-	case LanguageSketchDrawing:
-		return languageSketchDrawingStr
-	case LanguageSKILL:
-		return languageSKILLStr
-	case LanguageSlash:
-		return languageSlashStr
-	case LanguageSlice:
-		return languageSliceStr
-	case LanguageSlim:
-		return languageSlimStr
-	case LanguageSlurm:
-		return languageSlurmStr
-	case LanguageSmali:
-		return languageSmaliStr
-	case LanguageSmalltalk:
-		return languageSmalltalkStr
-	case LanguageSmartGameFormat:
-		return languageSmartGameFormatStr
-	case LanguageSmarty:
-		return languageSmartyStr
-	case LanguageSMIME:
-		return languageSMIMEStr
-	case LanguageSML:
-		return languageSMLStr
-	case LanguageSmPL:
-		return languageSmPLStr
-	case LanguageSMT:
-		return languageSMTStr
-	case LanguageSnobol:
-		return languageSnobolStr
-	case LanguageSnowball:
-		return languageSnowballStr
-	case LanguageSolidity:
-		return languageSolidityStr
-	case LanguageSourcePawn:
-		return languageSourcePawnStr
-	case LanguageSourcesList:
-		return languageSourcesListStr
-	case LanguageSPARQL:
-		return languageSPARQLStr
-	case LanguageSplineFontDatabase:
-		return languageSplineFontDatabaseStr
-	case LanguageSQF:
-		return languageSQFStr
-	case LanguageSQL:
-		return languageSQLStr
-	case LanguageSQLPL:
-		return languageSQLPLStr
-	case LanguageSqlite3con:
-		return languageSqlite3conStr
-	case LanguageSquidConf:
-		return languageSquidConfStr
-	case LanguageSquirrel:
-		return languageSquirrelStr
-	case LanguageSRecodeTemplate:
-		return languageSRecodeTemplateStr
-	case LanguageSSHConfig:
-		return languageSSHConfigStr
-	case LanguageSSP:
-		return languageSSPStr
-	case LanguageStan:
-		return languageStanStr
-	case LanguageStarlark:
-		return languageStarlarkStr
-	case LanguageStata:
-		return languageStataStr
-	case LanguageSTON:
-		return languageSTONStr
-	case LanguageStylus:
-		return languageStylusStr
-	case LanguageSublimeTextConfig:
-		return languageSublimeTextConfigStr
-	case LanguageSubRipText:
-		return languageSubRipTextStr
-	case LanguageSugarSS:
-		return languageSugarSSStr
-	case LanguageSuperCollider:
-		return languageSuperColliderStr
-	case LanguageSvelte:
-		return languageSvelteStr
-	case LanguageSVG:
-		return languageSVGStr
-	case LanguageSwift:
-		return languageSwiftStr
-	case LanguageSWIG:
-		return languageSWIGStr
-	case LanguageSYSTEMD:
-		return languageSYSTEMDStr
-	case LanguageSystemVerilog:
-		return languageSystemVerilogStr
-	case LanguageTableGen:
-		return languageTableGenStr
-	case LanguageTADS3:
-		return languageTADS3Str
-	case LanguageTAP:
-		return languageTAPStr
-	case LanguageTASM:
-		return languageTASMStr
-	case LanguageTcl:
-		return languageTclStr
-	case LanguageTcsh:
-		return languageTcshStr
-	case LanguageTcshSession:
-		return languageTcshSessionStr
-	case LanguageTea:
-		return languageTeaStr
-	case LanguageTeraTerm:
-		return languageTeraTermStr
-	case LanguageTermcap:
-		return languageTermcapStr
-	case LanguageTerminfo:
-		return languageTerminfoStr
-	case LanguageTerra:
-		return languageTerraStr
-	case LanguageTerraform:
-		return languageTerraformStr
-	case LanguageTeX:
-		return languageTeXStr
-	case LanguageTexinfo:
-		return languageTexinfoStr
-	case LanguageText:
-		return languageTextStr
-	case LanguageTextile:
-		return languageTextileStr
-	case LanguageThrift:
-		return languageThriftStr
-	case LanguageTiddler:
-		return languageTiddlerStr
-	case LanguageTIProgram:
-		return languageTIProgramStr
-	case LanguageTLA:
-		return languageTLAStr
-	case LanguageTNT:
-		return languageTNTStr
-	case LanguageTodotxt:
-		return languageTodotxtStr
-	case LanguageTOML:
-		return languageTOMLStr
-	case LanguageTradingView:
-		return languageTradingViewStr
-	case LanguageTrafficScript:
-		return languageTrafficScriptStr
-	case LanguageTransactSQL:
-		return languageTSQLStr
-	case LanguageTreetop:
-		return languageTreetopStr
-	case LanguageTSV:
-		return languageTSVStr
-	case LanguageTSX:
-		return languageTSXStr
-	case LanguageTuring:
-		return languageTuringStr
-	case LanguageTurtle:
-		return languageTurtleStr
-	case LanguageTwig:
-		return languageTwigStr
-	case LanguageTXL:
-		return languageTXLStr
-	case LanguageTypeLanguage:
-		return languageTypeLanguageStr
-	case LanguageTypeScript:
-		return languageTypeScriptStr
-	case LanguageTypoScript:
-		return languageTypoScriptStr
-	case LanguageUcode:
-		return languageUcodeStr
-	case LanguageUnicon:
-		return languageUniconStr
-	case LanguageUnifiedParallelC:
-		return languageUnifiedParallelCStr
-	case LanguageUnity3DAsset:
-		return languageUnity3DAssetStr
-	case LanguageUnixAssembly:
-		return languageUnixAssemblyStr
-	case LanguageUno:
-		return languageUnoStr
-	case LanguageUnrealScript:
-		return languageUnrealScriptStr
-	case LanguageUrbiScript:
-		return languageUrbiScriptStr
-	case LanguageUrWeb:
-		return languageUrWebStr
-	case LanguageUSD:
-		return languageUSDStr
-	case LanguageV:
-		return languageVStr
-	case LanguageVala:
-		return languageValaStr
-	case LanguageVB:
-		return languageVBStr
-	case LanguageVBA:
-		return languageVBAStr
-	case LanguageVBNet:
-		return languageVBNetStr
-	case LanguageVBScript:
-		return languageVBScriptStr
-	case LanguageVCL:
-		return languageVCLStr
-	case LanguageVCLSnippets:
-		return languageVCLSnippetsStr
-	case LanguageVCTreeStatus:
-		return languageVCTreeStatusStr
-	case LanguageVelocity:
-		return languageVelocityStr
-	case LanguageVGL:
-		return languageVGLStr
-	case LanguageVerilog:
-		return languageVerilogStr
-	case LanguageVHDL:
-		return languageVHDLStr
-	case LanguageVimHelpFile:
-		return languageVimHelpFileStr
-	case LanguageVimL:
-		return languageVimLStr
-	case LanguageVimScript:
-		return languageVimScriptStr
-	case LanguageVimSnippet:
-		return languageVimSnippetStr
-	case LanguageVolt:
-		return languageVoltStr
-	case LanguageVueJS:
-		return languageVueJSStr
-	case LanguageWavefrontMaterial:
-		return languageWavefrontMaterialStr
-	case LanguageWavefrontObject:
-		return languageWavefrontObjectStr
-	case LanguageWdl:
-		return languageWdlStr
-	case LanguageWDTE:
-		return languageWDTEStr
-	case LanguageWDiff:
-		return languageWDiffStr
-	case LanguageWebAssembly:
-		return languageWebAssemblyStr
-	case LanguageWebIDL:
-		return languageWebIDLStr
-	case LanguageWebOntologyLanguage:
-		return languageWebOntologyLanguageStr
-	case LanguageWebVTT:
-		return languageWebVTTStr
-	case LanguageWgetConfig:
-		return languageWgetConfigStr
-	case LanguageWhiley:
-		return languageWhileyStr
-	case LanguageWindowsRegistryEntries:
-		return languageWindowsRegistryEntriesStr
-	case LanguageWisp:
-		return languageWispStr
-	case LanguageWollok:
-		return languageWollokStr
-	case LanguageWowAddonData:
-		return languageWowAddonDataStr
-	case LanguageX10:
-		return languageX10Str
-	case LanguageXAML:
-		return languageXAMLStr
-	case LanguageXBase:
-		return languageXBaseStr
-	case LanguageXBitMap:
-		return languageXBitMapStr
-	case LanguageXC:
-		return languageXCStr
-	case LanguageXCompose:
-		return languageXComposeStr
-	case LanguageXFontDirectoryIndex:
-		return languageXFontDirectoryIndexStr
-	case LanguageXML:
-		return languageXMLStr
-	case LanguageXMLPropertyList:
-		return languageXMLPropertyListStr
-	case LanguageXojo:
-		return languageXojoStr
-	case LanguageXorg:
-		return languageXorgStr
-	case LanguageXPages:
-		return languageXPagesStr
-	case LanguageXPixMap:
-		return languageXPixMapStr
-	case LanguageXProc:
-		return languageXProcStr
-	case LanguageXQuery:
-		return languageXQueryStr
-	case LanguageXS:
-		return languageXSStr
-	case LanguageXSLT:
-		return languageXSLTStr
-	case LanguageXtend:
-		return languageXtendStr
-	case LanguageXtlang:
-		return languageXtlangStr
-	case LanguageYacc:
-		return languageYaccStr
-	case LanguageYAML:
-		return languageYAMLStr
-	case LanguageYANG:
-		return languageYANGStr
-	case LanguageYARA:
-		return languageYARAStr
-	case LanguageYASnippet:
-		return languageYASnippetStr
-	case LanguageZAP:
-		return languageZAPStr
-	case LanguageZeek:
-		return languageZeekStr
-	case LanguageZenScript:
-		return languageZenScriptStr
-	case LanguageZephir:
-		return languageZephirStr
-	case LanguageZig:
-		return languageZigStr
-	case LanguageZIL:
-		return languageZILStr
-	case LanguageZimpl:
-		return languageZimplStr
-
-	default:
-		return languageUnkownStr
+	if s, ok := languageToString[l]; ok {
+		return s
 	}
+
+	return languageUnknownStr
 }
 
 // StringChroma returns the corresponding chroma lexer name.
-// nolint:gocyclo
 func (l Language) StringChroma() string {
-	switch l {
-	case LanguageAMPL:
-		return languageAMPLChromaStr
-	case LanguageApacheConfig:
-		return languageApacheConfStr
-	case LanguageAssembly:
-		return languageAssemblyChromaStr
-	case LanguageAutoHotkey:
-		return languageAutoHotkeyChromaStr
-	case LanguageCObjdump:
-		return languageCObjdumpChromaStr
-	case LanguageColdfusionCFC:
-		return languageColdfusionCFCChromaStr
-	case LanguageColdfusionHTML:
-		return languageColdfusionHTMLChromaStr
-	case LanguageCppObjdump:
-		return languageCppObjdumpChromaStr
-	case LanguageCUDA:
-		return languageCUDAChromaStr
-	case LanguageEmacsLisp:
-		return languageEmacsLispChromaStr
-	case LanguageFSharp:
-		return languageFSharpChromaStr
-	case LanguageFStar:
-		return languageFStarLiteralStr
-	case LanguageHxml:
-		return languageHxmlChromaStr
-	case LanguageJSONLD:
-		return languageJSONLDChromaStr
-	case LanguageJSX:
-		return languageJSXChromaStr
-	case LanguageLess:
-		return languageLessChromaStr
-	case LanguageLiquid:
-		return languageLiquidChromaStr
-	case LanguageMakefile:
-		return languageMakefileChromaStr
-	case LanguageMarkdown:
-		return languageMarkdownChromaStr
-	case LanguageNewLisp:
-		return languageNewLispChromaStr
-	case LanguageNimrod:
-		return languageNimrodChromaStr
-	case LanguageOoc:
-		return languageOocChromaStr
-	case LanguageOrg:
-		return languageOrgChromaStr
-	case LanguageReasonML:
-		return languageReasonMLChromaStr
-	case LanguageREBOL:
-		return languageREBOLChromaStr
-	case LanguageRexx:
-		return languageRexxChromaStr
-	case LanguageS:
-		return languageRChromaStr
-	case LanguageSYSTEMD:
-		return languageSYSTEMDChromaStr
-	case LanguageSystemVerilog:
-		return languageSystemVerilogChromaStr
-	case LanguageText:
-		return languageTextChromaStr
-	case LanguageTransactSQL:
-		return languageTransactSQLChromaStr
-	case LanguageVBNet:
-		return languageVBNetChromaStr
-	case LanguageVerilog:
-		return languageVerilogChromaStr
-	case LanguageVueJS:
-		return languageVueJSChromaStr
-	case LanguageWebIDL:
-		return languageWebIDLChromaStr
-	default:
-		return l.String()
+	if s, ok := languageToChroma[l]; ok {
+		return s
 	}
+
+	return l.String()
 }
 
 func normalizeString(s string) string {

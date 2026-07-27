@@ -12,7 +12,7 @@ import (
 func TestParserHaskell_Parse(t *testing.T) {
 	parser := deps.ParserHaskell{}
 
-	dependencies, err := parser.Parse("testdata/haskell.hs")
+	dependencies, err := parser.Parse(t.Context(), "testdata/haskell.hs")
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{

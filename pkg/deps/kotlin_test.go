@@ -12,7 +12,7 @@ import (
 func TestParserKotlin_Parse(t *testing.T) {
 	parser := deps.ParserKotlin{}
 
-	dependencies, err := parser.Parse("testdata/kotlin.kt")
+	dependencies, err := parser.Parse(t.Context(), "testdata/kotlin.kt")
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{

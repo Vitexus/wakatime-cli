@@ -1,14 +1,15 @@
 package deps
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"regexp"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/lexers/g"
+	"github.com/wakatime/wakatime-cli/pkg/file"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 )
 
 var goExcludeRegex = regexp.MustCompile(`^"fmt"$`)
@@ -26,29 +27,21 @@ const (
 // ParserGo is a dependency parser for the go programming language.
 // It is not thread safe.
 type ParserGo struct {
-	Parenthesis int
-	State       StateGo
-	Output      []string
+	State  StateGo
+	Output []string
 }
 
 // Parse parses dependencies from Golang file content using the chroma Golang lexer.
-func (p *ParserGo) Parse(filepath string) ([]string, error) {
-	reader, err := os.Open(filepath)
+func (p *ParserGo) Parse(ctx context.Context, filepath string) ([]string, error) {
+	head, err := file.ReadHead(ctx, filepath, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %s", filepath, err)
+		return nil, fmt.Errorf("failed to read: %s", err)
 	}
-
-	defer reader.Close()
 
 	p.init()
 	defer p.init()
 
-	data, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read from reader: %s", err)
-	}
-
-	iter, err := g.Go.Tokenise(nil, string(data))
+	iter, err := lexers.Go.Tokenise(nil, string(head))
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize file content: %s", err)
 	}
@@ -69,7 +62,6 @@ func (p *ParserGo) append(dep string) {
 }
 
 func (p *ParserGo) init() {
-	p.Parenthesis = 0
 	p.State = StateGoUnknown
 	p.Output = nil
 }
@@ -78,32 +70,19 @@ func (p *ParserGo) processToken(token chroma.Token) {
 	switch token.Type {
 	case chroma.KeywordNamespace:
 		p.processKeywordNamespace(token.Value)
-	case chroma.Punctuation:
-		p.processPunctuation(token.Value)
 	case chroma.LiteralString:
 		p.processLiteralString(token.Value)
-	case chroma.Text:
-		p.processText(token.Value)
+	case chroma.NameFunction:
+		p.processNameFunction()
 	}
 }
 
 func (p *ParserGo) processKeywordNamespace(value string) {
-	p.Parenthesis = 0
-
 	switch value {
 	case "import":
 		p.State = StateGoImport
 	default:
 		p.State = StateGoUnknown
-	}
-}
-
-func (p *ParserGo) processPunctuation(value string) {
-	switch value {
-	case "(":
-		p.Parenthesis++
-	case ")":
-		p.Parenthesis--
 	}
 }
 
@@ -113,13 +92,6 @@ func (p *ParserGo) processLiteralString(value string) {
 	}
 }
 
-func (p *ParserGo) processText(value string) {
-	if p.State == StateGoImport {
-		if value == "\n" && p.Parenthesis <= 0 {
-			p.State = StateGoUnknown
-			p.Parenthesis = 0
-		}
-	} else {
-		p.State = StateGoUnknown
-	}
+func (p *ParserGo) processNameFunction() {
+	p.State = StateGoUnknown
 }

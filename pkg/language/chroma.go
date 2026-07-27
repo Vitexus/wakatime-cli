@@ -1,57 +1,33 @@
 package language
 
 import (
-	"fmt"
-	"io"
-	"os"
-	fp "path/filepath"
+	"context"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/wakatime/wakatime-cli/pkg/file"
 	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
 	"github.com/wakatime/wakatime-cli/pkg/log"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/lexers"
-	_ "github.com/alecthomas/chroma/lexers/a"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/b"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/c"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/circular" // not used directly
-	_ "github.com/alecthomas/chroma/lexers/d"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/e"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/f"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/g"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/h"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/i"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/j"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/k"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/l"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/m"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/n"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/o"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/p"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/q"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/r"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/s"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/t"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/v"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/w"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/x"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/y"        // not used directly
-	_ "github.com/alecthomas/chroma/lexers/z"        // not used directly
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/danwakefield/fnmatch"
 )
 
 // detectChromaCustomized returns the best by filename matching lexer. Best lexer is determined
 // by customized priority.
+// If guessLanguage is true, the file content will be used to detect the language.
 // This is a modified implementation of chroma.lexers.internal.api:Match().
-func detectChromaCustomized(filepath string) (heartbeat.Language, float32, bool) {
-	_, file := fp.Split(filepath)
-	filename := fp.Base(file)
+func detectChromaCustomized(ctx context.Context, fp string, guessLanguage bool) (heartbeat.Language, float32, bool) {
+	logger := log.Extract(ctx)
+
+	_, filepart := filepath.Split(fp)
+	filename := filepath.Base(filepart)
 	matched := chroma.PrioritisedLexers{}
 
 	// First, try primary filename matches.
-	for _, lexer := range lexers.Registry.Lexers {
+	for _, lexer := range lexers.GlobalLexerRegistry.Lexers {
 		config := lexer.Config()
 		for _, glob := range config.Filenames {
 			if fnmatch.Match(glob, filename, 0) || fnmatch.Match(glob, strings.ToLower(filename), 0) {
@@ -61,11 +37,11 @@ func detectChromaCustomized(filepath string) (heartbeat.Language, float32, bool)
 	}
 
 	if len(matched) > 0 {
-		bestLexer, weight := selectByCustomizedPriority(filepath, matched)
+		bestLexer, weight := selectByCustomizedPriority(ctx, fp, matched)
 
 		language, ok := heartbeat.ParseLanguageFromChroma(bestLexer.Config().Name)
 		if !ok {
-			log.Warnf("failed to parse language from chroma lexer name %q", bestLexer.Config().Name)
+			logger.Warnf("failed to parse language from chroma lexer name %q", bestLexer.Config().Name)
 			return heartbeat.LanguageUnknown, 0, false
 		}
 
@@ -73,7 +49,7 @@ func detectChromaCustomized(filepath string) (heartbeat.Language, float32, bool)
 	}
 
 	// Next, try filename aliases.
-	for _, lexer := range lexers.Registry.Lexers {
+	for _, lexer := range lexers.GlobalLexerRegistry.Lexers {
 		config := lexer.Config()
 		for _, glob := range config.AliasFilenames {
 			if fnmatch.Match(glob, filename, 0) {
@@ -83,15 +59,40 @@ func detectChromaCustomized(filepath string) (heartbeat.Language, float32, bool)
 	}
 
 	if len(matched) > 0 {
-		bestLexer, weight := selectByCustomizedPriority(filepath, matched)
+		bestLexer, weight := selectByCustomizedPriority(ctx, fp, matched)
 
 		language, ok := heartbeat.ParseLanguageFromChroma(bestLexer.Config().Name)
 		if !ok {
-			log.Warnf("failed to parse language from chroma lexer name %q", bestLexer.Config().Name)
+			logger.Warnf("failed to parse language from chroma lexer name %q", bestLexer.Config().Name)
 			return heartbeat.LanguageUnknown, 0, false
 		}
 
 		return language, weight, true
+	}
+
+	if !guessLanguage {
+		return heartbeat.LanguageUnknown, 0, false
+	}
+
+	// Finally, try matching by file content.
+	head, err := file.ReadHead(ctx, fp, 0)
+	if err != nil {
+		logger.Warnf("failed to load head from file %q: %s", fp, err)
+		return heartbeat.LanguageUnknown, 0, false
+	}
+
+	if len(head) == 0 {
+		return heartbeat.LanguageUnknown, 0, false
+	}
+
+	if lexer := lexers.Analyse(string(head)); lexer != nil {
+		language, ok := heartbeat.ParseLanguageFromChroma(lexer.Config().Name)
+		if !ok {
+			logger.Warnf("failed to parse language from chroma lexer name %q", lexer.Config().Name)
+			return heartbeat.LanguageUnknown, 0, false
+		}
+
+		return language, 0, true
 	}
 
 	return heartbeat.LanguageUnknown, 0, false
@@ -105,7 +106,9 @@ type weightedLexer struct {
 }
 
 // selectByCustomizedPriority selects the best matching lexer by customized priority evaluation.
-func selectByCustomizedPriority(filepath string, lexers chroma.PrioritisedLexers) (chroma.Lexer, float32) {
+func selectByCustomizedPriority(ctx context.Context, fp string, lexers chroma.PrioritisedLexers) (chroma.Lexer, float32) {
+	logger := log.Extract(ctx)
+
 	sort.Slice(lexers, func(i, j int) bool {
 		icfg, jcfg := lexers[i].Config(), lexers[j].Config()
 
@@ -118,18 +121,16 @@ func selectByCustomizedPriority(filepath string, lexers chroma.PrioritisedLexers
 		return strings.ToLower(icfg.Name) > strings.ToLower(jcfg.Name)
 	})
 
-	dir, _ := fp.Split(filepath)
+	dir, _ := filepath.Split(fp)
 
 	extensions, err := loadFolderExtensions(dir)
 	if err != nil {
-		log.Warnf("failed to load folder extensions: %s", err)
-		return lexers[0], 0
+		logger.Warnf("failed to load folder files extensions: %s", err)
 	}
 
-	head, err := fileHead(filepath)
+	head, err := file.ReadHead(ctx, fp, 0)
 	if err != nil {
-		log.Warnf("failed to load head from file %q: %s", filepath, err)
-		return lexers[0], 0
+		logger.Warnf("failed to load head from file %q: %s", fp, err)
 	}
 
 	var weighted []weightedLexer
@@ -196,25 +197,6 @@ func selectByCustomizedPriority(filepath string, lexers chroma.PrioritisedLexers
 	})
 
 	return weighted[0].Lexer, weighted[0].Weight
-}
-
-// fileHead returns the first 512000 bytes of the file's content.
-func fileHead(filepath string) ([]byte, error) {
-	f, err := os.Open(filepath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file: %s", err)
-	}
-
-	defer f.Close()
-
-	data := make([]byte, 512000)
-
-	_, err = f.ReadAt(data, 0)
-	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("failed to read bytes from file: %s", err)
-	}
-
-	return data, nil
 }
 
 // objectiveCWeight determines the weight of objective-c by the provided same folder file extensions.

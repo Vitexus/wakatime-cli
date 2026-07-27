@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"net/http"
 	"time"
@@ -8,28 +10,8 @@ import (
 	"github.com/wakatime/wakatime-cli/pkg/log"
 )
 
-// NewTransport initializes a new http.Transport.
-func NewTransport() *http.Transport {
-	return &http.Transport{
-		Proxy:               nil,
-		TLSHandshakeTimeout: 30 * time.Second,
-		MaxIdleConns:        1,
-		MaxIdleConnsPerHost: 1,
-		MaxConnsPerHost:     1,
-		ForceAttemptHTTP2:   true,
-	}
-}
-
-// LazyCreateNewTransport uses the client's Transport if exists, or creates a new one.
-func LazyCreateNewTransport(c *Client) *http.Transport {
-	if c != nil && c.client != nil && c.client.Transport != nil {
-		return c.client.Transport.(*http.Transport).Clone()
-	}
-
-	return NewTransport()
-}
-
-const letsencryptCerts string = `
+const (
+	letsencryptCerts = `
 -----BEGIN CERTIFICATE-----
 MIIEYDCCAkigAwIBAgIQB55JKIY3b9QISMI/xjHkYzANBgkqhkiG9w0BAQsFADBP
 MQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJuZXQgU2VjdXJpdHkgUmVzZWFy
@@ -102,16 +84,54 @@ mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
 emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 -----END CERTIFICATE-----
 `
+	serverName = "api.wakatime.com"
+)
+
+// NewTransport initializes a new http.Transport.
+func NewTransport() *http.Transport {
+	return &http.Transport{
+		ForceAttemptHTTP2:   true,
+		MaxConnsPerHost:     1,
+		MaxIdleConns:        1,
+		MaxIdleConnsPerHost: 1,
+		Proxy:               nil,
+		TLSHandshakeTimeout: DefaultTimeoutSecs * time.Second,
+	}
+}
+
+// NewTransportWithHostVerificationDisabled initializes a new http.Transport with disabled host verification.
+func NewTransportWithHostVerificationDisabled(ctx context.Context) *http.Transport {
+	t := NewTransport()
+
+	t.TLSClientConfig = &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    CACerts(ctx),
+		ServerName: serverName,
+	}
+
+	return t
+}
+
+// LazyCreateNewTransport uses the client's Transport if exists, or creates a new one.
+func LazyCreateNewTransport(c *Client) *http.Transport {
+	if c != nil && c.client != nil && c.client.Transport != nil {
+		return c.client.Transport.(*http.Transport).Clone()
+	}
+
+	return NewTransport()
+}
 
 // CACerts returns a root cert pool with the system's cacerts and LetsEncrypt's root certs.
-func CACerts() *x509.CertPool {
-	certs, err := loadSystemRoots()
+func CACerts(ctx context.Context) *x509.CertPool {
+	logger := log.Extract(ctx)
+
+	certs, err := loadSystemRoots(ctx)
 	if err != nil {
-		log.Warnf("unable to use system cert pool: %s", err)
+		logger.Warnf("unable to use system cert pool: %s", err)
 	}
 
 	if certs == nil {
-		log.Warnf("system cert pool empty")
+		logger.Warnf("system cert pool empty")
 
 		certs = x509.NewCertPool()
 	}

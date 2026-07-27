@@ -12,7 +12,7 @@ import (
 func TestParserCSharp_Parse(t *testing.T) {
 	parser := deps.ParserCSharp{}
 
-	dependencies, err := parser.Parse("testdata/csharp.cs")
+	dependencies, err := parser.Parse(t.Context(), "testdata/csharp.cs")
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{

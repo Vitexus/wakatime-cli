@@ -1,9 +1,13 @@
 package project
 
 import (
+	"context"
+	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -11,235 +15,694 @@ import (
 	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
 	"github.com/wakatime/wakatime-cli/pkg/log"
 	"github.com/wakatime/wakatime-cli/pkg/regex"
+	"github.com/wakatime/wakatime-cli/pkg/windows"
+
+	"github.com/gandarez/go-realpath"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
-// nolint: gochecknoglobals
-var driveLetterRegex = regexp.MustCompile(`^[a-zA-Z]:\\$`)
+var (
+	driveLetterRegex = regexp.MustCompile(`^[a-zA-Z]:\\$`)
+)
 
-// maxRecursiveIteration limits the number of a func will be called recursively.
-const maxRecursiveIteration = 500
+const (
+	// WakaTimeProjectFile is the special file which if present should contain the project name and optional branch name
+	// that will be used instead of the auto-detected project and branch names.
+	WakaTimeProjectFile = ".wakatime-project"
+	// maxRecursiveIteration limits the number of a func will be called recursively.
+	maxRecursiveIteration = 500
+)
 
-// Detecter is a common interface for project.
-type Detecter interface {
-	Detect() (Result, bool, error)
-	String() string
+// DetectorID represents a detector ID.
+type DetectorID int
+
+const (
+	// UnknownDetector is the detector ID used when not detected.
+	UnknownDetector DetectorID = iota
+	// FileDetector is the detector ID for file detector.
+	FileDetector
+	// MapDetector is the detector ID for map detector.
+	MapDetector
+	// GitDetector is the detector ID for git detector.
+	GitDetector
+	// MercurialDetector is the detector ID for mercurial detector.
+	MercurialDetector
+	// SubversionDetector is the detector ID for subversion detector.
+	SubversionDetector
+	// TfvcDetector is the detector ID for tfvc detector.
+	TfvcDetector
+)
+
+const (
+	fileDetectorString       = "project-file-detector"
+	mapDetectorString        = "project-map-detector"
+	gitDetectorString        = "git-detector"
+	mercurialDetectorString  = "mercurial-detector"
+	subversionDetectorString = "svn-detector"
+	tfvcDetectorString       = "tfvc-detector"
+)
+
+// String implements fmt.Stringer interface.
+func (d DetectorID) String() string {
+	switch d {
+	case FileDetector:
+		return fileDetectorString
+	case MapDetector:
+		return mapDetectorString
+	case GitDetector:
+		return gitDetectorString
+	case MercurialDetector:
+		return mercurialDetectorString
+	case SubversionDetector:
+		return subversionDetectorString
+	case TfvcDetector:
+		return tfvcDetectorString
+	case UnknownDetector:
+		fallthrough
+	default:
+		return ""
+	}
 }
 
-// Result contains the result of Detect().
-type Result struct {
-	Project string
-	Branch  string
-	Folder  string
-}
+type (
+	// Detecter is a common interface for project.
+	Detecter interface {
+		Detect(context.Context) (Result, bool, error)
+		ID() DetectorID
+	}
 
-// Config contains project detection configurations.
-type Config struct {
-	// Patterns contains the overridden project name per path.
-	MapPatterns []MapPattern
-	// SubmodulePatterns contains the paths to validate for submodules.
-	SubmodulePatterns []regex.Regex
-	// ShouldObfuscateProject determines if the project name should be obfuscated according some rules.
-	ShouldObfuscateProject bool
-}
+	// DetecterArg determines for a given path if it needs to run.
+	DetecterArg struct {
+		Filepath  string
+		ShouldRun bool
+	}
 
-// MapPattern contains [projectmap] data.
-type MapPattern struct {
-	// Name is the project name.
-	Name string
-	// Regex is the regular expression for a specific path.
-	Regex regex.Regex
-}
+	// Result contains the result of Detect().
+	Result struct {
+		Project string
+		Branch  string
+		Folder  string
+	}
+
+	// Config contains project detection configurations.
+	Config struct {
+		// HideProjectNames determines if the project name should be obfuscated by matching its path.
+		HideProjectNames []regex.Regex
+		// Patterns contains the overridden project name per path.
+		MapPatterns []MapPattern
+		// ProjectFromGitRemote when enabled uses the git remote as the project name instead of local git folder.
+		ProjectFromGitRemote bool
+		// Submodule contains the submodule configurations.
+		Submodule Submodule
+	}
+
+	// MapPattern contains the project name and regular expression for a specific path.
+	MapPattern struct {
+		// Name is the project name.
+		Name string
+		// Regex is the regular expression for a specific path.
+		Regex regex.Regex
+	}
+
+	// Submodule contains the submodule configurations.
+	Submodule struct {
+		// DisabledPatterns contains the paths to match against submodules
+		// and if matched it will skip the project detection.
+		DisabledPatterns []regex.Regex
+		// MapPatterns contains the overridden project name per path for submodule.
+		MapPatterns []MapPattern
+	}
+)
 
 // WithDetection finds the current project and branch.
-// First looks for a .wakatime-project file. Second, uses the --project arg.
-// Third, uses the folder name from a revision control repository. Last, uses
-// the --alternate-project arg.
-func WithDetection(c Config) heartbeat.HandleOption {
+// First looks for a .wakatime-project file or project map. Second, uses the
+// --project arg. Third, try to auto-detect using a revision control repository.
+// Last, uses the --alternate-project arg.
+func WithDetection(config Config) heartbeat.HandleOption {
 	return func(next heartbeat.Handle) heartbeat.Handle {
-		return func(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
-			log.Debugln("execute project detection")
-
+		return func(ctx context.Context, hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
 			for n, h := range hh {
-				if h.EntityType != heartbeat.FileType {
-					project := firstNonEmptyString(h.ProjectOverride, h.ProjectAlternate)
-					hh[n].Project = &project
+				// logger.Debugf("execute project detection for: %s", h.Entity)
 
-					continue
-				}
+				// First use .wakatime-project or [projectmap] section with entity path.
+				// Then, detect with project folder. This tries to use the same project name
+				// across all IDEs instead of sometimes using alternate project when file is unsaved
+				result, detector := Detect(ctx, config.MapPatterns,
+					DetecterArg{Filepath: h.Entity, ShouldRun: h.EntityType == heartbeat.FileType},
+					DetecterArg{Filepath: h.ProjectPathOverride, ShouldRun: true},
+				)
 
-				var result Result
-
-				result.Project, result.Branch = Detect(h.Entity, c.MapPatterns)
-
-				if result.Project == "" {
+				// Project override
+				if result.Project == "" && h.ProjectOverride != "" {
 					result.Project = h.ProjectOverride
+					result.Folder = h.ProjectPathOverride
 				}
 
-				if result.Project == "" || result.Branch == "" {
-					revControlResult := DetectWithRevControl(h.Entity, c.SubmodulePatterns, c.ShouldObfuscateProject)
+				// Autodetect with revision control from entity path.
+				// Then, autodetect with project folder. This tries to use the same project name
+				// across all IDEs instead of sometimes using alternate project when file is unsaved.
+				// Also needed for {project} placeholder interpolation in .wakatime-project files.
+				hasPlaceholder := detector == FileDetector && strings.Contains(result.Project, projectPlaceholder)
 
-					result.Project = firstNonEmptyString(result.Project, revControlResult.Project)
+				if result.Project == "" || result.Branch == "" || result.Folder == "" || hasPlaceholder {
+					revControlResult := DetectWithRevControl(
+						ctx,
+						config.Submodule.DisabledPatterns,
+						config.Submodule.MapPatterns,
+						config.ProjectFromGitRemote,
+						DetecterArg{Filepath: h.Entity, ShouldRun: h.EntityType == heartbeat.FileType},
+						DetecterArg{Filepath: h.ProjectPathOverride, ShouldRun: true},
+					)
+
+					// Handle {project} placeholder in file-detected project name
+					if hasPlaceholder {
+						result.Project = interpolateProjectPlaceholder(
+							result.Project,
+							revControlResult.Project,
+							firstNonEmptyString(result.Folder, h.ProjectPathOverride),
+						)
+					} else {
+						result.Project = firstNonEmptyString(result.Project, revControlResult.Project)
+					}
+
 					result.Branch = firstNonEmptyString(result.Branch, revControlResult.Branch)
+					result.Folder = firstNonEmptyString(result.Folder, revControlResult.Folder)
+				}
 
-					if result.Project == "" {
-						result.Project = setProjectName(h.ProjectAlternate, c.ShouldObfuscateProject, revControlResult.Folder)
+				folder := h.ProjectPathOverride
+				if runtime.GOOS == "windows" {
+					folder = windows.FormatFilePath(folder)
+				}
+
+				// Use project folder last part as project name
+				if result.Project == "" && h.ProjectPathOverride != "" {
+					proj := filepath.Base(folder)
+
+					if proj != "." && proj != "/" {
+						result.Project = proj
+					}
+
+					result.Folder = folder
+				}
+
+				// Alternate project if none auto-detected
+				if result.Project == "" && h.ProjectAlternate != "" {
+					result.Project = h.ProjectAlternate
+				}
+
+				// Alternate branch if none detected
+				if result.Branch == "" && h.BranchAlternate != "" {
+					result.Branch = h.BranchAlternate
+				}
+
+				// Make sure project folder is defined when not found from entity's path
+				result.Folder = firstNonEmptyString(result.Folder, folder)
+
+				// If no folder found, use entity's directory
+				if h.EntityType == heartbeat.FileType && result.Folder == "" {
+					result.Folder = filepath.Dir(h.Entity)
+				}
+
+				// Obfuscate project name if necessary
+				if heartbeat.ShouldSanitize(ctx, heartbeat.SanitizeCheck{
+					Entity:              h.Entity,
+					ProjectPath:         result.Folder,
+					Patterns:            config.HideProjectNames,
+					ProjectPathOverride: h.ProjectPathOverride,
+				}) && result.Project != "" && detector != FileDetector {
+					result.Project = obfuscateProjectName(ctx, result.Folder)
+				}
+
+				result.Folder = FormatProjectFolder(ctx, result.Folder)
+
+				// Count total subfolders in project's path
+				if result.Folder != "" && strings.HasPrefix(h.Entity, result.Folder) {
+					subfolders := CountSlashesInProjectFolder(result.Folder)
+					if subfolders > 0 {
+						hh[n].ProjectRootCount = &subfolders
 					}
 				}
 
 				hh[n].Project = &result.Project
 				hh[n].Branch = &result.Branch
+				hh[n].ProjectPath = result.Folder
 			}
 
-			return next(hh)
+			return next(ctx, hh)
 		}
 	}
 }
 
 // Detect finds the current project and branch from config plugins.
-func Detect(entity string, patterns []MapPattern) (project, branch string) {
-	var configPlugins []Detecter = []Detecter{
-		File{
-			Filepath: entity,
-		},
-		Map{
-			Filepath: entity,
-			Patterns: patterns,
-		},
-	}
+func Detect(ctx context.Context, patterns []MapPattern, args ...DetecterArg) (Result, DetectorID) {
+	logger := log.Extract(ctx)
 
-	for _, p := range configPlugins {
-		result, detected, err := p.Detect()
-		if err != nil {
-			log.Errorf("unexpected error occurred at %q: %s", p.String(), err)
+	for _, arg := range args {
+		if !arg.ShouldRun || arg.Filepath == "" {
 			continue
-		} else if detected {
-			return result.Project, result.Branch
+		}
+
+		var configPlugins = []Detecter{
+			File{
+				Filepath: arg.Filepath,
+			},
+			Map{
+				Filepath: arg.Filepath,
+				Patterns: patterns,
+			},
+		}
+
+		for _, p := range configPlugins {
+			// logger.Debugf("execute %s", p.ID().String())
+			result, detected, err := p.Detect(ctx)
+			if err != nil {
+				logger.Errorf("unexpected error occurred at %q: %s", p.ID().String(), err)
+				continue
+			}
+
+			if detected {
+				return result, p.ID()
+			}
 		}
 	}
 
-	return "", ""
+	return Result{}, UnknownDetector
 }
 
 // DetectWithRevControl finds the current project and branch from rev control.
-func DetectWithRevControl(entity string, submodulePatterns []regex.Regex, shouldObfuscate bool) Result {
-	var revControlPlugins []Detecter = []Detecter{
-		Git{
-			Filepath:          entity,
-			SubmodulePatterns: submodulePatterns,
-		},
-		Mercurial{
-			Filepath: entity,
-		},
-		Subversion{
-			Filepath: entity,
-		},
-		Tfvc{
-			Filepath: entity,
-		},
-	}
+func DetectWithRevControl(
+	ctx context.Context,
+	submoduleDisabledPatterns []regex.Regex,
+	submoduleProjectMapPatterns []MapPattern,
+	projectFromGitRemote bool,
+	args ...DetecterArg) Result {
+	logger := log.Extract(ctx)
 
-	for _, p := range revControlPlugins {
-		result, detected, err := p.Detect()
-		if err != nil {
-			log.Errorf("unexpected error occurred at %q: %s", p.String(), err)
+	for _, arg := range args {
+		if !arg.ShouldRun || arg.Filepath == "" {
 			continue
 		}
 
-		if detected {
-			result := Result{
-				Project: result.Project,
-				Branch:  result.Branch,
-				Folder:  result.Folder,
+		var revControlPlugins = []Detecter{
+			Git{
+				Filepath:                    arg.Filepath,
+				ProjectFromGitRemote:        projectFromGitRemote,
+				SubmoduleDisabledPatterns:   submoduleDisabledPatterns,
+				SubmoduleProjectMapPatterns: submoduleProjectMapPatterns,
+			},
+			Mercurial{
+				Filepath: arg.Filepath,
+			},
+			Subversion{
+				Filepath: arg.Filepath,
+			},
+			Tfvc{
+				Filepath: arg.Filepath,
+			},
+		}
+
+		for _, p := range revControlPlugins {
+			// logger.Debugf("execute %s", p.ID().String())
+			result, detected, err := p.Detect(ctx)
+			if err != nil {
+				logger.Errorf("unexpected error occurred at %q: %s", p.ID().String(), err)
+				continue
 			}
 
-			if shouldObfuscate {
-				result.Project = ""
+			if detected {
+				return Result{
+					Project: result.Project,
+					Branch:  result.Branch,
+					Folder:  result.Folder,
+				}
 			}
-
-			return result
 		}
 	}
 
 	return Result{}
 }
 
-func setProjectName(alternate string, shouldObfuscateProject bool, folder string) string {
-	if !shouldObfuscateProject {
-		return alternate
+func obfuscateProjectName(ctx context.Context, folder string) string {
+	// when folder unknown, use Unknown Project (https://github.com/wakatime/wakatime-cli/issues/1164)
+	if folder == "" {
+		return ""
 	}
 
+	// prevent overwriting existing project files, use Unknown Project instead
+	if fileOrDirExists(filepath.Join(folder, WakaTimeProjectFile)) {
+		return ""
+	}
+
+	logger := log.Extract(ctx)
 	project := generateProjectName()
 
 	err := Write(folder, project)
 	if err != nil {
-		log.Warnf("failed to write: %s", err)
+		logger.Errorf("failed to write: %s", err)
+
+		// use 'Unknown Project' when unable to save random project name to local .wakatime-project file, to
+		// prevent tons of random project names on the dashboard
+		return ""
 	}
 
 	return project
 }
 
+// Write saves wakatime project file.
+func Write(folder, project string) error {
+	err := os.WriteFile(filepath.Join(folder, WakaTimeProjectFile), []byte(project+"\n"), 0644) // nolint:gosec
+	if err != nil {
+		return fmt.Errorf("failed to save wakatime project file: %s", err)
+	}
+
+	return nil
+}
+
 func generateProjectName() string {
 	adjectives := []string{
-		"aged", "ancient", "autumn", "billowing", "bitter", "black", "blue", "bold",
-		"broad", "broken", "calm", "cold", "cool", "crimson", "curly", "damp",
-		"dark", "dawn", "delicate", "divine", "dry", "empty", "falling", "fancy",
-		"flat", "floral", "fragrant", "frosty", "gentle", "green", "hidden", "holy",
-		"icy", "jolly", "late", "lingering", "little", "lively", "long", "lucky",
-		"misty", "morning", "muddy", "mute", "nameless", "noisy", "odd", "old",
-		"orange", "patient", "plain", "polished", "proud", "purple", "quiet", "rapid",
-		"raspy", "red", "restless", "rough", "round", "royal", "shiny", "shrill",
-		"shy", "silent", "small", "snowy", "soft", "solitary", "sparkling", "spring",
-		"square", "steep", "still", "summer", "super", "sweet", "throbbing", "tight",
-		"tiny", "twilight", "wandering", "weathered", "white", "wild", "winter", "wispy",
-		"withered", "yellow", "young"}
+		"aged",
+		"ambitious",
+		"ancient",
+		"artistic",
+		"autumn",
+		"awful",
+		"bad",
+		"billowing",
+		"bitter",
+		"black",
+		"blue",
+		"bold",
+		"bright",
+		"broad",
+		"broken",
+		"calm",
+		"charming",
+		"clever",
+		"cold",
+		"cool",
+		"crimson",
+		"curly",
+		"damp",
+		"dark",
+		"dawn",
+		"delicate",
+		"delightful",
+		"divine",
+		"dry",
+		"empty",
+		"falling",
+		"fancy",
+		"flat",
+		"floral",
+		"fragrant",
+		"friendly",
+		"frosty",
+		"gentle",
+		"good",
+		"green",
+		"hidden",
+		"holy",
+		"icy",
+		"jolly",
+		"joyful",
+		"late",
+		"lingering",
+		"little",
+		"lively",
+		"long",
+		"lucky",
+		"misty",
+		"morning",
+		"muddy",
+		"mute",
+		"nameless",
+		"noisy",
+		"odd",
+		"old",
+		"orange",
+		"patient",
+		"plain",
+		"polished",
+		"proud",
+		"purple",
+		"quiet",
+		"rapid",
+		"raspy",
+		"red",
+		"restless",
+		"rough",
+		"round",
+		"royal",
+		"shiny",
+		"shrill",
+		"shy",
+		"silent",
+		"small",
+		"snowy",
+		"soft",
+		"solitary",
+		"sour",
+		"sparkling",
+		"spring",
+		"square",
+		"steep",
+		"still",
+		"summer",
+		"super",
+		"sweet",
+		"throbbing",
+		"tight",
+		"tiny",
+		"twilight",
+		"wandering",
+		"weathered",
+		"white",
+		"wild",
+		"winter",
+		"wispy",
+		"withered",
+		"yellow",
+		"young",
+	}
 
 	nouns := []string{
-		"art", "band", "bar", "base", "bird", "block", "boat", "bonus",
-		"bread", "breeze", "brook", "bush", "butterfly", "cake", "cell", "cherry",
-		"cloud", "credit", "darkness", "dawn", "dew", "disk", "dream", "dust",
-		"feather", "field", "fire", "firefly", "flower", "fog", "forest", "frog",
-		"frost", "glade", "glitter", "grass", "hall", "hat", "haze", "heart",
-		"hill", "king", "lab", "lake", "leaf", "limit", "math", "meadow",
-		"mode", "moon", "morning", "mountain", "mouse", "mud", "night", "paper",
-		"pine", "poetry", "pond", "queen", "rain", "recipe", "resonance", "rice",
-		"river", "salad", "scene", "sea", "shadow", "shape", "silence", "sky",
-		"smoke", "snow", "snowflake", "sound", "star", "sun", "sun", "sunset",
-		"surf", "term", "thunder", "tooth", "tree", "truth", "union", "unit",
-		"violet", "voice", "water", "waterfall", "wave", "wildflower", "wind", "wood"}
+		"air",
+		"arm",
+		"art",
+		"band",
+		"bank",
+		"bar",
+		"base",
+		"bath",
+		"berry",
+		"bird",
+		"block",
+		"boat",
+		"bonus",
+		"bread",
+		"breeze",
+		"brook",
+		"bush",
+		"butterfly",
+		"cafe",
+		"cake",
+		"cell",
+		"cherry",
+		"cloud",
+		"coffee",
+		"control",
+		"credit",
+		"customer",
+		"darkness",
+		"dawn",
+		"desk",
+		"device",
+		"dew",
+		"diamond",
+		"direction",
+		"disk",
+		"dream",
+		"dust",
+		"ear",
+		"egg",
+		"father",
+		"feather",
+		"field",
+		"fire",
+		"firefly",
+		"fish",
+		"flight",
+		"flower",
+		"fog",
+		"forest",
+		"frog",
+		"frost",
+		"future",
+		"garden",
+		"glade",
+		"glitter",
+		"grass",
+		"guest",
+		"hair",
+		"hall",
+		"hand",
+		"hat",
+		"haze",
+		"heart",
+		"hill",
+		"home",
+		"king",
+		"lab",
+		"ladder",
+		"lake",
+		"law",
+		"leaf",
+		"limit",
+		"machine",
+		"math",
+		"meadow",
+		"meaning",
+		"media",
+		"mode",
+		"moon",
+		"morning",
+		"mother",
+		"mountain",
+		"mouse",
+		"mud",
+		"music",
+		"night",
+		"office",
+		"oven",
+		"paint",
+		"paper",
+		"pasta",
+		"people",
+		"percent",
+		"person",
+		"pine",
+		"pizza",
+		"poet",
+		"poetry",
+		"pond",
+		"quality",
+		"queen",
+		"rain",
+		"receipt",
+		"recipe",
+		"resonance",
+		"rice",
+		"river",
+		"salad",
+		"scene",
+		"sea",
+		"shadow",
+		"shape",
+		"shower",
+		"silence",
+		"sky",
+		"smoke",
+		"snow",
+		"snowflake",
+		"society",
+		"song",
+		"sound",
+		"soup",
+		"star",
+		"store",
+		"strategy",
+		"stream",
+		"sun",
+		"sunset",
+		"surf",
+		"table",
+		"tea",
+		"teacher",
+		"term",
+		"theory",
+		"thunder",
+		"tooth",
+		"town",
+		"tree",
+		"truth",
+		"union",
+		"unit",
+		"village",
+		"violet",
+		"voice",
+		"water",
+		"waterfall",
+		"wave",
+		"wildflower",
+		"wind",
+		"wood",
+		"world",
+	}
 
 	str := []string{}
 
-	rand.Seed(time.Now().UnixNano())
-	str = append(str, strings.Title(adjectives[rand.Intn(len(adjectives))])) //nolint:gosec
-	rand.Seed(time.Now().UnixNano())
-	str = append(str, strings.Title(nouns[rand.Intn(len(nouns))])) //nolint:gosec
-	rand.Seed(time.Now().UnixNano())
-	str = append(str, strconv.Itoa(rand.Intn(100))) //nolint:gosec
+	c := cases.Title(language.AmericanEnglish)
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano())) // nolint:gosec
+	str = append(str, c.String(adjectives[r.Intn(len(adjectives))]))
+	r = rand.New(rand.NewSource(time.Now().UnixNano())) // nolint:gosec
+	str = append(str, c.String(nouns[r.Intn(len(nouns))]))
+	r = rand.New(rand.NewSource(time.Now().UnixNano())) // nolint:gosec
+	str = append(str, strconv.Itoa(r.Intn(100)))
 
 	return strings.Join(str, " ")
 }
 
-// FindFileOrDirectory searches for a file or directory with name `filename`.
-// Search starts in `startDir` and will traverse through all parent directories until the file is found,
-// root directory is reached or `maxRecursiveIteration` is exceeded.
-func FindFileOrDirectory(startDir, fileDir, filename string) (string, bool) {
+// CountSlashesInProjectFolder counts the number of slashes in a folder path.
+func CountSlashesInProjectFolder(directory string) int {
+	if directory == "" {
+		return 0
+	}
+
+	directory = windows.FormatFilePath(directory)
+
+	// Add trailing slash if not present.
+	if !strings.HasSuffix(directory, "/") {
+		directory += "/"
+	}
+
+	return strings.Count(directory, "/")
+}
+
+// FindFileOrDirectory searches current and all parent folders for a file or directory named `filename`.
+// Starts in `directory` and traverses through all parent directories.
+// `directory` may also be a file, and in that case will start from the file's directory.
+func FindFileOrDirectory(ctx context.Context, directory, filename string) (string, bool) {
 	i := 0
 	for i < maxRecursiveIteration {
-		if fileExists(filepath.Join(startDir, fileDir, filename)) {
-			return filepath.Join(startDir, fileDir, filename), true
-		}
-
-		startDir = filepath.Clean(filepath.Join(startDir, ".."))
-		if startDir == "." || startDir == "/" || driveLetterRegex.MatchString(startDir) {
+		if isRootPath(directory) {
 			return "", false
 		}
+
+		if fileOrDirExists(filepath.Join(directory, filename)) {
+			return filepath.Join(directory, filename), true
+		}
+
+		directory = filepath.Clean(filepath.Join(directory, ".."))
 
 		i++
 	}
 
-	log.Warnf("didn't find %s after %d iterations", filename, maxRecursiveIteration)
+	logger := log.Extract(ctx)
+	logger.Warnf("max %d iterations reached without finding %s", maxRecursiveIteration, filename)
 
 	return "", false
+}
+
+func isRootPath(directory string) bool {
+	return (directory == "" ||
+		directory == "." ||
+		directory == string(filepath.Separator) ||
+		directory == filepath.Dir(directory)) ||
+		directory == filepath.VolumeName(directory) ||
+		directory == "\\\\wsl$" ||
+		driveLetterRegex.MatchString(directory)
 }
 
 // firstNonEmptyString accepts multiple values and return the first non empty string value.
@@ -251,4 +714,56 @@ func firstNonEmptyString(values ...string) string {
 	}
 
 	return ""
+}
+
+// interpolateProjectPlaceholder replaces {project} placeholder with the detected project name.
+// If vcsProject is empty, it falls back to the folder basename.
+func interpolateProjectPlaceholder(projectTemplate, vcsProject, folder string) string {
+	if vcsProject != "" {
+		return strings.ReplaceAll(projectTemplate, projectPlaceholder, vcsProject)
+	}
+
+	// Fallback: use folder basename if no VCS project detected
+	if folder != "" {
+		basename := filepath.Base(folder)
+		if basename != "." && basename != "/" && basename != "\\" {
+			return strings.ReplaceAll(projectTemplate, projectPlaceholder, basename)
+		}
+	}
+
+	return projectTemplate
+}
+
+// FormatProjectFolder returns the abs and real path for the given directory path.
+func FormatProjectFolder(ctx context.Context, fp string) string {
+	if fp == "" {
+		return ""
+	}
+
+	if runtime.GOOS == "windows" {
+		return windows.FormatFilePath(fp)
+	}
+
+	logger := log.Extract(ctx)
+
+	formatted, err := filepath.Abs(fp)
+	if err != nil {
+		logger.Debugf("failed to resolve absolute path for %q: %s", fp, err)
+		return fp
+	}
+
+	// evaluate any symlinks
+	formatted, err = realpath.Realpath(formatted)
+	if err != nil {
+		logger.Debugf("failed to resolve real path for %q: %s", formatted, err)
+		return fp
+	}
+
+	return formatted
+}
+
+// fileOrDirExists checks if a file or directory exist.
+func fileOrDirExists(fp string) bool {
+	_, err := os.Stat(fp)
+	return err == nil || os.IsExist(err)
 }

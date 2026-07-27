@@ -2,9 +2,10 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/wakatime/wakatime-cli/pkg/diagnostic"
@@ -13,29 +14,41 @@ import (
 )
 
 type diagnosticsBody struct {
-	Platform     string `json:"platform"`
-	Architecture string `json:"architecture"`
-	Plugin       string `json:"plugin"`
-	CliVersion   string `json:"cli_version"`
-	Logs         string `json:"logs,omitempty"`
-	Stack        string `json:"stacktrace,omitempty"`
+	Architecture  string `json:"architecture"`
+	CliVersion    string `json:"cli_version"`
+	IsPanic       bool   `json:"is_panic,omitempty"`
+	Logs          string `json:"logs,omitempty"`
+	OriginalError string `json:"error_message,omitempty"`
+	Platform      string `json:"platform"`
+	Plugin        string `json:"plugin"`
+	Stack         string `json:"stacktrace,omitempty"`
 }
 
 // SendDiagnostics sends diagnostics to the WakaTime api.
-func (c *Client) SendDiagnostics(plugin string, diagnostics ...diagnostic.Diagnostic) error {
+func (c *Client) SendDiagnostics(
+	ctx context.Context,
+	plugin string,
+	panicked bool,
+	diagnostics ...diagnostic.Diagnostic,
+) error {
+	logger := log.Extract(ctx)
+
 	url := c.baseURL + "/plugins/errors"
 
-	log.Debugf("sending diagnostic data to api at %s", url)
+	logger.Debugf("sending diagnostic data to api at %s", url)
 
 	body := diagnosticsBody{
-		Platform:     version.OS,
 		Architecture: version.Arch,
 		CliVersion:   version.Version,
+		IsPanic:      panicked,
+		Platform:     version.OS,
 		Plugin:       plugin,
 	}
 
 	for _, d := range diagnostics {
-		switch d.Type {
+		switch d.Type { // nolint:exhaustive
+		case diagnostic.TypeError:
+			body.OriginalError = d.Value
 		case diagnostic.TypeLogs:
 			body.Logs = d.Value
 		case diagnostic.TypeStack:
@@ -55,27 +68,27 @@ func (c *Client) SendDiagnostics(plugin string, diagnostics ...diagnostic.Diagno
 		return fmt.Errorf("failed to create request: %s", err)
 	}
 
-	req.Header.Add("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.Do(req)
+	resp, err := c.Do(ctx, req)
 	if err != nil {
-		return ErrRequest(fmt.Sprintf("failed making request to %q: %s", url, err))
+		return Err{Err: fmt.Errorf("failed making request to %q: %s", url, err)}
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() // nolint:errcheck,gosec
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return Err(fmt.Sprintf("failed reading response body from %q: %s", url, err))
+		return Err{Err: fmt.Errorf("failed reading response body from %q: %s", url, err)}
 	}
 
 	if resp.StatusCode != http.StatusCreated {
-		return Err(fmt.Sprintf(
+		return Err{Err: fmt.Errorf(
 			"invalid response status from %q. got: %d, want: %d. body: %q",
 			url,
 			resp.StatusCode,
 			http.StatusCreated,
 			string(respBody),
-		))
+		)}
 	}
 
 	return nil

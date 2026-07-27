@@ -1,0 +1,41 @@
+[
+  {
+    "cursorpos": 41,
+    "entity": "%s",
+    "language": "Go",
+    "lineno": 11,
+    "lines": 91,
+    "project": "wakatime-cli",
+    "project_root_count": %d,
+    "type": "file",
+    "time": 1585598051,
+    "user_agent": "%s"
+  },
+  {
+    "cursorpos": 12,
+    "entity": "%s",
+    "is_write": true,
+    "language": "Go",
+    "lineno": 42,
+    "lines": 45,
+    "project": "wakatime-cli",
+    "project_root_count": %d,
+    "type": "file",
+    "time": 1585598052,
+    "user_agent": "%s"
+  },
+  {
+    "cursorpos": 13,
+    "dependencies": ["os"],
+    "entity": "%s",
+    "is_write": true,
+    "language": "Go",
+    "lineno": 43,
+    "lines": 11,
+    "project": "wakatime-cli",
+    "project_root_count": %d,
+    "type": "file",
+    "time": 1585598053,
+    "user_agent": "%s"
+  }
+]

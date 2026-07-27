@@ -1,13 +1,9 @@
 package project
 
 import (
-	"fmt"
+	"context"
 	"path/filepath"
 	"runtime"
-
-	"github.com/wakatime/wakatime-cli/pkg/log"
-
-	"github.com/yookoala/realpath"
 )
 
 // Tfvc contains tfvc data.
@@ -17,18 +13,12 @@ type Tfvc struct {
 }
 
 // Detect gets information about the tfvc project for a given file.
-func (t Tfvc) Detect() (Result, bool, error) {
-	log.Debugln("execute tfvc project detection")
-
-	fp, err := realpath.Realpath(t.Filepath)
-	if err != nil {
-		return Result{}, false,
-			Err(fmt.Errorf("failed to get the real path: %w", err).Error())
-	}
+func (t Tfvc) Detect(ctx context.Context) (Result, bool, error) {
+	var fp string
 
 	// Take only the directory
-	if fileExists(fp) {
-		fp = filepath.Dir(fp)
+	if fileOrDirExists(t.Filepath) {
+		fp = filepath.Dir(t.Filepath)
 	}
 
 	tfFolderName := ".tf"
@@ -37,20 +27,20 @@ func (t Tfvc) Detect() (Result, bool, error) {
 	}
 
 	// Find for tf/properties.tf1 file
-	tfDirectory, ok := FindFileOrDirectory(fp, tfFolderName, "properties.tf1")
-	if !ok {
+	tfDirectory, found := FindFileOrDirectory(ctx, fp, filepath.Join(tfFolderName, "properties.tf1"))
+	if !found {
 		return Result{}, false, nil
 	}
 
-	project := filepath.Base(filepath.Join(tfDirectory, "../.."))
+	project := filepath.Base(filepath.Join(tfDirectory, "..", ".."))
 
 	return Result{
 		Project: project,
-		Folder:  filepath.Dir(filepath.Join(tfDirectory, "../..")),
+		Folder:  filepath.Dir(filepath.Join(tfDirectory, "..", "..")),
 	}, true, nil
 }
 
-// String returns its name.
-func (t Tfvc) String() string {
-	return "tfvc-detector"
+// ID returns its id.
+func (Tfvc) ID() DetectorID {
+	return TfvcDetector
 }

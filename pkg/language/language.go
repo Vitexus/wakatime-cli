@@ -1,23 +1,32 @@
 package language
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 
+	"github.com/wakatime/wakatime-cli/pkg/file"
 	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
 	"github.com/wakatime/wakatime-cli/pkg/log"
 )
 
+// Config defines language detection options.
+type Config struct {
+	// GuessLanguage enables detecting lexer language from file contents.
+	GuessLanguage bool
+}
+
 // WithDetection initializes and returns a heartbeat handle option, which
 // can be used in a heartbeat processing pipeline to detect and add programming
 // language info to heartbeats of entity type 'file'.
-func WithDetection() heartbeat.HandleOption {
+func WithDetection(config Config) heartbeat.HandleOption {
 	return func(next heartbeat.Handle) heartbeat.Handle {
-		return func(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
-			log.Debugln("execute language detection")
+		return func(ctx context.Context, hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+			logger := log.Extract(ctx)
+			// logger.Debugln("execute language detection")
 
 			for n, h := range hh {
 				if hh[n].Language != nil {
@@ -30,45 +39,62 @@ func WithDetection() heartbeat.HandleOption {
 					filepath = h.LocalFile
 				}
 
-				language, err := Detect(filepath)
+				language, err := Detect(ctx, filepath, config.GuessLanguage)
 				if err != nil && hh[n].LanguageAlternate != "" {
-					hh[n].Language = heartbeat.String(hh[n].LanguageAlternate)
+					hh[n].Language = heartbeat.PointerTo(hh[n].LanguageAlternate)
 
 					continue
 				}
 
 				if err != nil {
-					log.Warnf("failed to detect language on file entity %q: %s", h.Entity, err)
+					logger.Debugf("failed to detect language on file entity %q: %s", h.Entity, err)
 
 					continue
 				}
 
-				hh[n].Language = heartbeat.String(language.String())
+				hh[n].Language = heartbeat.PointerTo(language.String())
 			}
 
-			return next(hh)
+			return next(ctx, hh)
 		}
 	}
 }
 
-// Detect detects the language of a specific file.
-func Detect(fp string) (heartbeat.Language, error) {
-	if language, ok := detectSpecialCases(fp); ok {
+// Detect detects the language of a specific file. If guessLanguage is true,
+// Chroma will be used to detect a language from the file contents.
+func Detect(ctx context.Context, fp string, guessLanguage bool) (heartbeat.Language, error) {
+	return detectLanguage(ctx, detect, fp, guessLanguage)
+}
+
+type detector func(ctx context.Context, fp string, guessLanguage bool) (heartbeat.Language, error)
+
+func detectLanguage(ctx context.Context, detect detector, fp string, guessLanguage bool) (
+	language heartbeat.Language, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Extract(ctx).Errorf("panicked: %v. Stack: %s", r, string(debug.Stack()))
+
+			language = heartbeat.LanguageUnknown
+			err = fmt.Errorf("panicked: %v", r)
+		}
+	}()
+
+	return detect(ctx, fp, guessLanguage)
+}
+
+func detect(ctx context.Context, fp string, guessLanguage bool) (heartbeat.Language, error) {
+	if language, ok := detectSpecialCases(ctx, fp); ok {
 		return language, nil
 	}
 
 	var language heartbeat.Language
 
-	languageChroma, weight, ok := detectChromaCustomized(fp)
+	languageChroma, weight, ok := detectChromaCustomized(ctx, fp, guessLanguage)
 	if ok {
 		language = languageChroma
 	}
 
-	languageVim, weightVim, okVim := detectVimModeline(fp)
-	if okVim && weightVim > weight {
-		// use language from vim modeline, if weight is higher
-		language = languageVim
-	}
+	language = detectOverrideCases(ctx, fp, language, weight)
 
 	if language == heartbeat.LanguageUnknown {
 		return heartbeat.LanguageUnknown, fmt.Errorf("could not detect the language of file %q", fp)
@@ -78,7 +104,7 @@ func Detect(fp string) (heartbeat.Language, error) {
 }
 
 // detectSpecialCases detects the language by file extension for some special cases.
-func detectSpecialCases(fp string) (heartbeat.Language, bool) {
+func detectSpecialCases(ctx context.Context, fp string) (heartbeat.Language, bool) {
 	dir, file := filepath.Split(fp)
 	ext := strings.ToLower(filepath.Ext(file))
 
@@ -103,11 +129,11 @@ func detectSpecialCases(fp string) (heartbeat.Language, bool) {
 			return heartbeat.LanguageObjectiveCPP, true
 		}
 
-		if folderContainsCPPFiles(dir) {
+		if folderContainsCPPFiles(ctx, dir) {
 			return heartbeat.LanguageCPP, true
 		}
 
-		if folderContainsCFiles(dir) {
+		if folderContainsCFiles(ctx, dir) {
 			return heartbeat.LanguageC, true
 		}
 	}
@@ -120,14 +146,59 @@ func detectSpecialCases(fp string) (heartbeat.Language, bool) {
 		return heartbeat.LanguageObjectiveCPP, true
 	}
 
+	if ext == ".pas" && folderContainsDelphiFiles(ctx, dir) {
+		return heartbeat.LanguageDelphi, true
+	}
+
 	return heartbeat.LanguageUnknown, false
 }
 
+// detectOverrideCases overwrides the Chroma detected language based on file contents.
+func detectOverrideCases(ctx context.Context, fp string, language heartbeat.Language, weight float32) heartbeat.Language {
+	logger := log.Extract(ctx)
+
+	head, err := file.ReadHead(ctx, fp, 0)
+	if err != nil {
+		logger.Debugf("failed to open file: %s", err)
+		return language
+	}
+
+	text := string(head)
+
+	languageVim, weightVim, okVim := detectVimModeline(text)
+	if okVim && weightVim > weight {
+		language = languageVim
+	}
+
+	_, file := filepath.Split(fp)
+	ext := strings.ToLower(filepath.Ext(file))
+
+	if ext == ".fs" {
+		languageForth, weightForth, okForth := detectForthFromContents(text)
+		if okForth && weightForth >= weight {
+			language = languageForth
+		}
+
+		languageFSharp, weightFSharp, okFSharp := detectFSharpFromContents(text)
+		if okFSharp && weightFSharp >= weight {
+			language = languageFSharp
+		}
+	}
+
+	return language
+}
+
 // folderContainsCFiles returns true, if filder contains c files.
-func folderContainsCFiles(dir string) bool {
+func folderContainsCFiles(ctx context.Context, dir string) bool {
+	if dir == "" {
+		return false
+	}
+
+	logger := log.Extract(ctx)
+
 	extensions, err := loadFolderExtensions(dir)
 	if err != nil {
-		log.Warnf("failed loading folder extensions: %s", err)
+		logger.Warnf("failed loading folder extensions: %s", err)
 		return false
 	}
 
@@ -140,11 +211,17 @@ func folderContainsCFiles(dir string) bool {
 	return false
 }
 
-// folderContainsCFiles returns true, if filder contains c++ files.
-func folderContainsCPPFiles(dir string) bool {
+// folderContainsCPPFiles returns true, if filder contains c++ files.
+func folderContainsCPPFiles(ctx context.Context, dir string) bool {
+	if dir == "" {
+		return false
+	}
+
+	logger := log.Extract(ctx)
+
 	extensions, err := loadFolderExtensions(dir)
 	if err != nil {
-		log.Warnf("failed loading folder extensions: %s", err)
+		logger.Warnf("failed loading folder extensions: %s", err)
 		return false
 	}
 
@@ -152,6 +229,32 @@ func folderContainsCPPFiles(dir string) bool {
 	for _, cppExt := range cppExtensions {
 		for _, e := range extensions {
 			if e == cppExt {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// folderContainsDelphiFiles returns true, if filder contains Delphi files.
+func folderContainsDelphiFiles(ctx context.Context, dir string) bool {
+	if dir == "" {
+		return false
+	}
+
+	logger := log.Extract(ctx)
+
+	extensions, err := loadFolderExtensions(dir)
+	if err != nil {
+		logger.Warnf("failed loading folder extensions: %s", err)
+		return false
+	}
+
+	expectedExtensions := []string{".fmx", ".dfm", ".dproj"}
+	for _, ext := range expectedExtensions {
+		for _, e := range extensions {
+			if e == ext {
 				return true
 			}
 		}
@@ -176,9 +279,9 @@ func correspondingFileExists(fp string, extension string) bool {
 	return false
 }
 
-// loadFolderExtensions loads all existing from a folder.
+// loadFolderExtensions loads all existing file extensions from a folder.
 func loadFolderExtensions(dir string) ([]string, error) {
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %s", err)
 	}

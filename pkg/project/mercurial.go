@@ -1,13 +1,13 @@
 package project
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
 
+	"github.com/wakatime/wakatime-cli/pkg/file"
 	"github.com/wakatime/wakatime-cli/pkg/log"
-
-	"github.com/yookoala/realpath"
 )
 
 // Mercurial contains mercurial data.
@@ -17,31 +17,26 @@ type Mercurial struct {
 }
 
 // Detect gets information about the mercurial project for a given file.
-func (m Mercurial) Detect() (Result, bool, error) {
-	log.Debugln("execute mercurial project detection")
-
-	fp, err := realpath.Realpath(m.Filepath)
-	if err != nil {
-		return Result{}, false,
-			Err(fmt.Sprintf("failed to get the real path: %s", err))
-	}
+func (m Mercurial) Detect(ctx context.Context) (Result, bool, error) {
+	var fp string
 
 	// Take only the directory
-	if fileExists(fp) {
-		fp = filepath.Dir(fp)
+	if fileOrDirExists(m.Filepath) {
+		fp = filepath.Dir(m.Filepath)
 	}
 
 	// Find for .hg folder
-	hgDirectory, ok := FindFileOrDirectory(fp, "", ".hg")
-	if !ok {
+	hgDirectory, found := FindFileOrDirectory(ctx, fp, ".hg")
+	if !found {
 		return Result{}, false, nil
 	}
 
-	project := filepath.Base(filepath.Join(hgDirectory, ".."))
+	logger := log.Extract(ctx)
+	project := filepath.Base(filepath.Dir(hgDirectory))
 
-	branch, err := findHgBranch(hgDirectory)
+	branch, err := findHgBranch(ctx, hgDirectory)
 	if err != nil {
-		log.Errorf(
+		logger.Errorf(
 			"error finding for branch name from %q: %s",
 			hgDirectory,
 			err,
@@ -51,19 +46,19 @@ func (m Mercurial) Detect() (Result, bool, error) {
 	return Result{
 		Project: project,
 		Branch:  branch,
-		Folder:  filepath.Dir(filepath.Join(hgDirectory, "..")),
+		Folder:  filepath.Dir(filepath.Dir(hgDirectory)),
 	}, true, nil
 }
 
-func findHgBranch(fp string) (string, error) {
+func findHgBranch(ctx context.Context, fp string) (string, error) {
 	p := filepath.Join(fp, "branch")
-	if !fileExists(p) {
+	if !fileOrDirExists(p) {
 		return "default", nil
 	}
 
-	lines, err := readFile(p)
+	lines, err := file.ReadLines(ctx, p, 1)
 	if err != nil {
-		return "", Err(fmt.Sprintf("failed while opening file %q: %s", fp, err))
+		return "", fmt.Errorf("failed while opening file %q: %s", fp, err)
 	}
 
 	if len(lines) > 0 {
@@ -73,7 +68,7 @@ func findHgBranch(fp string) (string, error) {
 	return "default", nil
 }
 
-// String returns its name.
-func (m Mercurial) String() string {
-	return "hg-detector"
+// ID returns its id.
+func (Mercurial) ID() DetectorID {
+	return MercurialDetector
 }

@@ -1,0 +1,252 @@
+package offlineprint_test
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/wakatime/wakatime-cli/cmd/offlineprint"
+	"github.com/wakatime/wakatime-cli/pkg/exitcode"
+
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	bolt "go.etcd.io/bbolt"
+)
+
+func TestPrintOfflineHeartbeats(t *testing.T) {
+	// setup offline queue
+	f, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer f.Close()
+
+	db, err := bolt.Open(f.Name(), 0600, nil)
+	require.NoError(t, err)
+
+	dataGo, err := os.ReadFile("testdata/heartbeat_go.json")
+	require.NoError(t, err)
+
+	dataPy, err := os.ReadFile("testdata/heartbeat_py.json")
+	require.NoError(t, err)
+
+	insertHeartbeatRecords(t, db, "heartbeats", []heartbeatRecord{
+		{
+			ID:        "1592868367.219124-file-coding-wakatime-cli-heartbeat-/tmp/main.go-true",
+			Heartbeat: string(dataGo),
+		},
+		{
+			ID:        "1592868386.079084-file-debugging-wakatime-summary-/tmp/main.py-false",
+			Heartbeat: string(dataPy),
+		},
+	})
+
+	err = db.Close()
+	require.NoError(t, err)
+
+	v := viper.New()
+	v.Set("print-offline-heartbeats", 10)
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("offline-queue-file", f.Name())
+
+	stdout := os.Stdout // keep backup of the real stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	code, err := offlineprint.Run(t.Context(), v)
+	require.NoError(t, err)
+
+	outC := make(chan string)
+	// copy the output in a separate goroutine so printing can't block indefinitely
+	go func() {
+		var buf bytes.Buffer
+
+		_, err = io.Copy(&buf, r)
+		require.NoError(t, err)
+
+		outC <- buf.String()
+	}()
+
+	w.Close()
+
+	os.Stdout = stdout
+	output := <-outC
+
+	offlineHeartbeat, err := os.ReadFile("testdata/offline_heartbeat.json")
+	require.NoError(t, err)
+
+	assert.Equal(t, exitcode.Success, code)
+	assert.Equal(t, string(offlineHeartbeat)+"\n", output)
+}
+
+func TestPrintOfflineHeartbeats_Empty(t *testing.T) {
+	// setup offline queue
+	f, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer f.Close()
+
+	v := viper.New()
+	v.Set("print-offline-heartbeats", 10)
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("offline-queue-file", f.Name())
+
+	stdout := os.Stdout // keep backup of the real stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	code, err := offlineprint.Run(t.Context(), v)
+	require.NoError(t, err)
+
+	outC := make(chan string)
+	// copy the output in a separate goroutine so printing can't block indefinitely
+	go func() {
+		var buf bytes.Buffer
+
+		_, err = io.Copy(&buf, r)
+		require.NoError(t, err)
+
+		outC <- buf.String()
+	}()
+
+	w.Close()
+
+	os.Stdout = stdout
+	output := <-outC
+
+	assert.Equal(t, exitcode.Success, code)
+	assert.Equal(t, "[]\n", output)
+}
+
+func TestPrintOfflineHeartbeats_OpenDBErr(t *testing.T) {
+	v := viper.New()
+	v.Set("print-offline-heartbeats", 10)
+	v.Set("offline-queue-file", t.TempDir())
+
+	var (
+		code int
+		err  error
+	)
+
+	output := captureStdout(t, func() {
+		code, err = offlineprint.Run(t.Context(), v)
+	})
+
+	require.Error(t, err)
+	assert.Equal(t, exitcode.ErrGeneric, code)
+	assert.Contains(t, err.Error(), "failed to read offline heartbeats")
+	assert.Contains(t, output, "failed to open db file")
+}
+
+func TestPrintOfflineHeartbeats_QueueFilepathErr(t *testing.T) {
+	v := viper.New()
+	v.Set("print-offline-heartbeats", 10)
+	v.Set("offline-queue-file", "~missing-user/offline_heartbeats.bdb")
+
+	output := captureStdout(t, func() {
+		code, err := offlineprint.Run(t.Context(), v)
+		assert.Equal(t, exitcode.ErrGeneric, code)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to load offline queue filepath")
+		assert.Contains(t, err.Error(), "failed expanding offline-queue-file param")
+	})
+
+	assert.Empty(t, output)
+}
+
+func TestPrintOfflineHeartbeats_CorruptDBErrReturnsWakaExitCode(t *testing.T) {
+	queueFilepath := filepath.Join(t.TempDir(), "offline_heartbeats.bdb")
+	require.NoError(t, os.WriteFile(queueFilepath, []byte("not a bolt db"), 0600))
+
+	v := viper.New()
+	v.Set("print-offline-heartbeats", 10)
+	v.Set("offline-queue-file", queueFilepath)
+
+	var (
+		code int
+		err  error
+	)
+
+	output := captureStdout(t, func() {
+		code, err = offlineprint.Run(t.Context(), v)
+	})
+
+	require.Error(t, err)
+	assert.Equal(t, exitcode.Success, code)
+	assert.Contains(t, err.Error(), "failed to read offline heartbeats")
+	assert.Contains(t, output, "moved corrupt db file")
+	assert.NoFileExists(t, queueFilepath)
+
+	backups, globErr := filepath.Glob(queueFilepath + ".corrupt.*")
+	require.NoError(t, globErr)
+	require.Len(t, backups, 1)
+	assert.FileExists(t, backups[0])
+}
+
+type heartbeatRecord struct {
+	ID        string
+	Heartbeat string
+}
+
+func insertHeartbeatRecords(t *testing.T, db *bolt.DB, bucket string, hh []heartbeatRecord) {
+	for _, h := range hh {
+		insertHeartbeatRecord(t, db, bucket, h)
+	}
+}
+
+func insertHeartbeatRecord(t *testing.T, db *bolt.DB, bucket string, h heartbeatRecord) {
+	t.Helper()
+
+	err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte(bucket))
+		if err != nil {
+			return fmt.Errorf("failed to create bucket: %s", err)
+		}
+
+		err = b.Put([]byte(h.ID), []byte(h.Heartbeat))
+		if err != nil {
+			return fmt.Errorf("failed put heartbeat: %s", err)
+		}
+
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	stdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+
+	os.Stdout = w
+
+	defer func() { os.Stdout = stdout }()
+
+	outC := make(chan string, 1)
+	errC := make(chan error, 1)
+
+	go func() {
+		var buf bytes.Buffer
+
+		_, err := io.Copy(&buf, r)
+		errC <- err
+
+		outC <- buf.String()
+	}()
+
+	fn()
+
+	require.NoError(t, w.Close())
+
+	output := <-outC
+
+	require.NoError(t, <-errC)
+	require.NoError(t, r.Close())
+
+	return output
+}

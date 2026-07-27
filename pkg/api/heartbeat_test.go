@@ -2,10 +2,11 @@ package api_test
 
 import (
 	"errors"
+	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,10 +39,10 @@ func TestClient_SendHeartbeats(t *testing.T) {
 				assert.Equal(t, []string{"application/json"}, req.Header["Content-Type"])
 
 				// check body
-				expectedBody, err := ioutil.ReadFile("testdata/api_heartbeats_request.json")
+				expectedBody, err := os.ReadFile("testdata/api_heartbeats_request.json")
 				require.NoError(t, err)
 
-				body, err := ioutil.ReadAll(req.Body)
+				body, err := io.ReadAll(req.Body)
 				require.NoError(t, err)
 
 				assert.JSONEq(t, string(expectedBody), string(body))
@@ -56,52 +57,108 @@ func TestClient_SendHeartbeats(t *testing.T) {
 			})
 
 			c := api.NewClient(url)
-			results, err := c.SendHeartbeats(testHeartbeats())
+			heartbeats := testHeartbeats()
+			results, err := c.SendHeartbeats(t.Context(), heartbeats)
 			require.NoError(t, err)
 
 			// check via assert.Equal on complete slice here, to assert exact order of results,
 			// which is assumed to exactly match the request order
 			assert.Equal(t, []heartbeat.Result{
 				{
-					Status: http.StatusCreated,
-					Heartbeat: heartbeat.Heartbeat{
-						Branch:         heartbeat.String("heartbeat"),
-						Category:       heartbeat.CodingCategory,
-						CursorPosition: heartbeat.Int(12),
-						Dependencies:   []string{"dep1", "dep2"},
-						Entity:         "/tmp/main.go",
-						EntityType:     heartbeat.FileType,
-						IsWrite:        heartbeat.Bool(true),
-						Language:       heartbeat.String("Go"),
-						LineNumber:     heartbeat.Int(42),
-						Lines:          heartbeat.Int(100),
-						Project:        heartbeat.String("wakatime-cli"),
-						Time:           1585598059,
-						UserAgent:      "wakatime/13.0.6",
-					},
+					Status:    http.StatusCreated,
+					ID:        "3F39FF6A-20A2-413E-8621-54AC80C3B5A2",
+					Heartbeat: heartbeats[0],
 				},
 				{
-					Status: http.StatusCreated,
-					Heartbeat: heartbeat.Heartbeat{
-						Branch:         nil,
-						Category:       heartbeat.DebuggingCategory,
-						CursorPosition: nil,
-						Dependencies:   nil,
-						Entity:         "HIDDEN.py",
-						EntityType:     heartbeat.FileType,
-						IsWrite:        nil,
-						LineNumber:     nil,
-						Lines:          nil,
-						Project:        nil,
-						Time:           1585598060,
-						UserAgent:      "wakatime/13.0.7",
-					},
+					Status:    http.StatusCreated,
+					ID:        "FD2F9CCA-6AE0-4ECB-A246-4AF8832F614C",
+					Heartbeat: heartbeats[1],
 				},
 			}, results)
 
-			assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+			assert.Equal(t, 1, numCalls)
 		})
 	}
+}
+
+func TestClient_SendHeartbeats_MultipleApiKey(t *testing.T) {
+	url, router, close := setupTestServer()
+	defer close()
+
+	var numCalls int
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, req *http.Request) {
+		numCalls++
+
+		// check auth header
+		switch numCalls {
+		case 1:
+			assert.Equal(t, []string{"Basic MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAw"}, req.Header["Authorization"])
+		case 2:
+			assert.Equal(t, []string{"Basic MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"}, req.Header["Authorization"])
+		}
+
+		// write response
+		f, err := os.Open("testdata/api_heartbeats_response.json")
+		require.NoError(t, err)
+
+		w.WriteHeader(http.StatusCreated)
+		_, err = io.Copy(w, f)
+		require.NoError(t, err)
+	})
+
+	c := api.NewClient(url)
+
+	hh := testHeartbeats()
+	hh[1].APIKey = "00000000-0000-4000-8000-000000000001"
+
+	_, err := c.SendHeartbeats(t.Context(), hh)
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, numCalls)
+}
+
+func TestClient_SendHeartbeats_Timeout(t *testing.T) {
+	url, router, close := setupTestServer()
+	defer close()
+
+	// to avoid race condition
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	var numCalls int
+
+	go func() {
+		router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, _ *http.Request) {
+			defer wg.Done()
+
+			numCalls++
+
+			time.Sleep(200 * time.Millisecond) // simulate a slow server to force a timeout
+
+			// write response
+			f, err := os.Open("testdata/api_heartbeats_response.json")
+			require.NoError(t, err)
+
+			w.WriteHeader(http.StatusCreated)
+			_, err = io.Copy(w, f)
+			require.NoError(t, err)
+		})
+	}()
+
+	c := api.NewClient(url, api.WithTimeout(100*time.Millisecond)) // very short timeout to force a timeout error
+	results, err := c.SendHeartbeats(t.Context(), testHeartbeats())
+
+	var errtimeout api.ErrTimeout
+
+	assert.ErrorAs(t, err, &errtimeout)
+
+	assert.EqualError(t, err, fmt.Sprintf("request to \"%s/users/current/heartbeats.bulk\" timed out", url))
+	assert.Empty(t, results)
+
+	wg.Wait()
+
+	assert.Equal(t, 1, numCalls)
 }
 
 func TestClient_SendHeartbeats_Err(t *testing.T) {
@@ -110,19 +167,21 @@ func TestClient_SendHeartbeats_Err(t *testing.T) {
 
 	var numCalls int
 
-	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, req *http.Request) {
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, _ *http.Request) {
 		numCalls++
+
 		w.WriteHeader(http.StatusInternalServerError)
 	})
 
 	c := api.NewClient(url)
-	_, err := c.SendHeartbeats(testHeartbeats())
+
+	_, err := c.SendHeartbeats(t.Context(), testHeartbeats())
 
 	var errapi api.Err
 
 	assert.True(t, errors.As(err, &errapi))
 
-	assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+	assert.Equal(t, 1, numCalls)
 }
 
 func TestClient_SendHeartbeats_ErrAuth(t *testing.T) {
@@ -131,35 +190,61 @@ func TestClient_SendHeartbeats_ErrAuth(t *testing.T) {
 
 	var numCalls int
 
-	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, req *http.Request) {
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, _ *http.Request) {
 		numCalls++
+
 		w.WriteHeader(http.StatusUnauthorized)
 	})
 
 	c := api.NewClient(url)
-	_, err := c.SendHeartbeats(testHeartbeats())
+
+	_, err := c.SendHeartbeats(t.Context(), testHeartbeats())
 
 	var errauth api.ErrAuth
 
-	assert.True(t, errors.As(err, &errauth))
+	assert.ErrorAs(t, err, &errauth)
 
-	assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+	assert.Equal(t, 1, numCalls)
 }
 
-func TestClient_SendHeartbeats_ErrRequest(t *testing.T) {
+func TestClient_SendHeartbeats_ErrBadRequest(t *testing.T) {
+	url, router, close := setupTestServer()
+	defer close()
+
+	var numCalls int
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, _ *http.Request) {
+		numCalls++
+
+		w.WriteHeader(http.StatusBadRequest)
+	})
+
+	c := api.NewClient(url)
+
+	_, err := c.SendHeartbeats(t.Context(), testHeartbeats())
+
+	var errbadRequest api.ErrBadRequest
+
+	assert.True(t, errors.As(err, &errbadRequest))
+
+	assert.Equal(t, 1, numCalls)
+}
+
+func TestClient_SendHeartbeats_InvalidUrl(t *testing.T) {
 	c := api.NewClient("invalid-url")
-	_, err := c.SendHeartbeats(testHeartbeats())
 
-	var errreq api.ErrRequest
+	_, err := c.SendHeartbeats(t.Context(), testHeartbeats())
 
-	assert.True(t, errors.As(err, &errreq))
+	var apierr api.Err
+
+	assert.True(t, errors.As(err, &apierr))
 }
 
 func TestParseHeartbeatResponses(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/api_heartbeats_response.json")
+	data, err := os.ReadFile("testdata/api_heartbeats_response.json")
 	require.NoError(t, err)
 
-	results, err := api.ParseHeartbeatResponses(data)
+	results, err := api.ParseHeartbeatResponses(t.Context(), data)
 	require.NoError(t, err)
 
 	// check via assert.Equal on complete slice here, to assert exact order of results,
@@ -167,47 +252,20 @@ func TestParseHeartbeatResponses(t *testing.T) {
 	assert.Equal(t, results, []heartbeat.Result{
 		{
 			Status: http.StatusCreated,
-			Heartbeat: heartbeat.Heartbeat{
-				Branch:         heartbeat.String("heartbeat"),
-				Category:       heartbeat.CodingCategory,
-				CursorPosition: heartbeat.Int(12),
-				Dependencies:   []string{"dep1", "dep2"},
-				Entity:         "/tmp/main.go",
-				EntityType:     heartbeat.FileType,
-				IsWrite:        heartbeat.Bool(true),
-				Language:       heartbeat.String("Go"),
-				LineNumber:     heartbeat.Int(42),
-				Lines:          heartbeat.Int(100),
-				Project:        heartbeat.String("wakatime-cli"),
-				Time:           1585598059,
-				UserAgent:      "wakatime/13.0.6",
-			},
+			ID:     "3F39FF6A-20A2-413E-8621-54AC80C3B5A2",
 		},
 		{
 			Status: http.StatusCreated,
-			Heartbeat: heartbeat.Heartbeat{
-				Branch:         nil,
-				Category:       heartbeat.DebuggingCategory,
-				CursorPosition: nil,
-				Dependencies:   nil,
-				Entity:         "HIDDEN.py",
-				EntityType:     heartbeat.FileType,
-				IsWrite:        nil,
-				LineNumber:     nil,
-				Lines:          nil,
-				Project:        nil,
-				Time:           1585598060,
-				UserAgent:      "wakatime/13.0.7",
-			},
+			ID:     "FD2F9CCA-6AE0-4ECB-A246-4AF8832F614C",
 		},
 	})
 }
 
 func TestParseHeartbeatResponses_Error(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/api_heartbeats_response_error.json")
+	data, err := os.ReadFile("testdata/api_heartbeats_response_error.json")
 	require.NoError(t, err)
 
-	results, err := api.ParseHeartbeatResponses(data)
+	results, err := api.ParseHeartbeatResponses(t.Context(), data)
 	require.NoError(t, err)
 
 	// asserting here the exact order of results, which is assumed to exactly match the request order
@@ -225,10 +283,10 @@ func TestParseHeartbeatResponses_Error(t *testing.T) {
 }
 
 func TestParseHeartbeatResponses_Errors(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/api_heartbeats_response_errors.json")
+	data, err := os.ReadFile("testdata/api_heartbeats_response_errors.json")
 	require.NoError(t, err)
 
-	results, err := api.ParseHeartbeatResponses(data)
+	results, err := api.ParseHeartbeatResponses(t.Context(), data)
 	require.NoError(t, err)
 
 	// asserting here the exact order of results, which is assumed to exactly match the request order
@@ -248,23 +306,25 @@ func TestParseHeartbeatResponses_Errors(t *testing.T) {
 func testHeartbeats() []heartbeat.Heartbeat {
 	return []heartbeat.Heartbeat{
 		{
-			Branch:         heartbeat.String("heartbeat"),
-			Category:       heartbeat.CodingCategory,
-			CursorPosition: heartbeat.Int(12),
+			APIKey:         "00000000-0000-4000-8000-000000000000",
+			Branch:         heartbeat.PointerTo("heartbeat"),
+			Category:       heartbeat.CodingCategory.String(),
+			CursorPosition: heartbeat.PointerTo(12),
 			Dependencies:   []string{"dep1", "dep2"},
 			Entity:         "/tmp/main.go",
 			EntityType:     heartbeat.FileType,
-			IsWrite:        heartbeat.Bool(true),
-			Language:       heartbeat.String("Go"),
-			LineNumber:     heartbeat.Int(42),
-			Lines:          heartbeat.Int(100),
-			Project:        heartbeat.String("wakatime-cli"),
+			IsWrite:        heartbeat.PointerTo(true),
+			Language:       heartbeat.PointerTo("Go"),
+			LineNumber:     heartbeat.PointerTo(42),
+			Lines:          heartbeat.PointerTo(100),
+			Project:        heartbeat.PointerTo("wakatime-cli"),
 			Time:           1585598059,
 			UserAgent:      "wakatime/13.0.6",
 		},
 		{
+			APIKey:         "00000000-0000-4000-8000-000000000000",
 			Branch:         nil,
-			Category:       heartbeat.DebuggingCategory,
+			Category:       heartbeat.DebuggingCategory.String(),
 			CursorPosition: nil,
 			Dependencies:   nil,
 			Entity:         "HIDDEN.py",

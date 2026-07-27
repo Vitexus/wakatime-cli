@@ -1,0 +1,204 @@
+{
+    "responses": [
+        [
+            {
+                "data": {
+                    "id": "A1B2C3D4-E5F6-7890-1234-56789ABCDEF0"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "B2C3D4E5-F6G7-8901-2345-6789ABCDEF01"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "C3D4E5F6-G7H8-9012-3456-789ABCDEF012"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "D4E5F6G7-H8I9-0123-4567-89ABCDEF0123"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "E5F6G7H8-I9J0-1234-5678-9ABCDEF01234"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "F6G7H8I9-J0K1-2345-6789-ABCDEF012345"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "G7H8I9J0-K1L2-3456-789A-BCDEF0123456"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "H8I9J0K1-L2M3-4567-89AB-CDEF01234567"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "I9J0K1L2-M3N4-5678-9ABC-DEF012345678"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "J0K1L2M3-N4O5-6789-ABCD-EF0123456789"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "K1L2M3N4-O5P6-789A-BCDE-F0123456789A"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "L2M3N4O5-P6Q7-89AB-CDEF-0123456789AB"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "M3N4O5P6-Q7R8-9ABC-DEF0-123456789ABC"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "N4O5P6Q7-R8S9-ABCD-EF01-23456789ABCD"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "O5P6Q7R8-S9T0-BCDE-F012-3456789ABCDE"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "P6Q7R8S9-T0U1-CDEF-0123-456789ABCDEF"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "Q7R8S9T0-U1V2-DEF0-1234-56789ABCDEF0"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "R8S9T0U1-V2W3-EF01-2345-6789ABCDEF01"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "S9T0U1V2-W3X4-F012-3456-789ABCDEF012"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "T0U1V2W3-X4Y5-0123-4567-89ABCDEF0123"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "U1V2W3X4-Y5Z6-1234-5678-9ABCDEF01234"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "data": {
+                    "id": "V2W3X4Y5-Z6A7-2345-6789-ABCDEF012345"
+                }
+            },
+            201
+        ],
+        [
+            {
+                "errors": {
+                    "category": [
+                        "This heartbeat will be thrown away."
+                    ]
+                }
+            },
+            400
+        ],
+        [
+            {
+                "error": "This heartbeat will be saved offline."
+            },
+            401
+        ],
+        [
+            {
+                "data": {
+                    "id": "Y5Z6A7B8-C9D0-5678-9ABC-DEF012345678"
+                }
+            },
+            201
+        ]
+    ]
+}

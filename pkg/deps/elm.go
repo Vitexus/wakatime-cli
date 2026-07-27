@@ -1,13 +1,15 @@
 package deps
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/lexers/e"
+	"github.com/wakatime/wakatime-cli/pkg/file"
+	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 )
 
 // StateElm is a token parsing state.
@@ -28,23 +30,21 @@ type ParserElm struct {
 }
 
 // Parse parses dependencies from Elm file content using the chroma Elm lexer.
-func (p *ParserElm) Parse(filepath string) ([]string, error) {
-	reader, err := os.Open(filepath)
+func (p *ParserElm) Parse(ctx context.Context, filepath string) ([]string, error) {
+	head, err := file.ReadHead(ctx, filepath, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %s", filepath, err)
+		return nil, fmt.Errorf("failed to read: %s", err)
 	}
-
-	defer reader.Close()
 
 	p.init()
 	defer p.init()
 
-	data, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read from reader: %s", err)
+	l := lexers.Get(heartbeat.LanguageElm.String())
+	if l == nil {
+		return nil, fmt.Errorf("failed to get lexer for %s", heartbeat.LanguageElm.String())
 	}
 
-	iter, err := e.Elm.Tokenise(nil, string(data))
+	iter, err := l.Tokenise(nil, string(head))
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize file content: %s", err)
 	}

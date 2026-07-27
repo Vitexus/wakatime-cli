@@ -1,10 +1,12 @@
 package api_test
 
 import (
-	"io/ioutil"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"testing"
-	"time"
 
 	"github.com/wakatime/wakatime-cli/pkg/api"
 	"github.com/wakatime/wakatime-cli/pkg/diagnostic"
@@ -25,34 +27,88 @@ func TestClient_SendDiagnostics(t *testing.T) {
 
 		// check method and headers
 		assert.Equal(t, http.MethodPost, req.Method)
-		assert.Equal(t, []string{"application/json"}, req.Header["Content-Type"])
 		assert.Nil(t, req.Header["Authorization"])
+		assert.Equal(t, []string{"application/json"}, req.Header["Content-Type"])
 
 		// check body
-		expectedBody, err := ioutil.ReadFile("testdata/diagnostics_request.json")
+		expectedBodyTpl, err := os.ReadFile("testdata/diagnostics_request_template.json")
 		require.NoError(t, err)
 
-		body, err := ioutil.ReadAll(req.Body)
+		body, err := io.ReadAll(req.Body)
 		require.NoError(t, err)
 
-		assert.JSONEq(t, string(expectedBody), string(body))
+		var diagnostics struct {
+			Architecture  string `json:"architecture"`
+			CliVersion    string `json:"cli_version"`
+			Logs          string `json:"logs"`
+			OriginalError string `json:"error_message"`
+			Platform      string `json:"platform"`
+			Plugin        string `json:"plugin"`
+			Stack         string `json:"stacktrace"`
+		}
+
+		err = json.Unmarshal(body, &diagnostics)
+		require.NoError(t, err)
+
+		expectedBodyStr := fmt.Sprintf(
+			string(expectedBodyTpl),
+			jsonEscape(t, diagnostics.OriginalError),
+			jsonEscape(t, diagnostics.Logs),
+			jsonEscape(t, diagnostics.Stack),
+		)
+
+		assert.JSONEq(t, expectedBodyStr, string(body))
 
 		// write response
 		w.WriteHeader(http.StatusCreated)
 	})
 
-	version.OS = "linux"
-	version.Arch = "amd64"
-	version.Version = "<local-build>"
+	version.OS = "some os"
+	version.Arch = "some architecture"
+	version.Version = "some version"
 
 	diagnostics := []diagnostic.Diagnostic{
+		diagnostic.Error("some error"),
 		diagnostic.Logs("some logs"),
 		diagnostic.Stack("some stack"),
 	}
 
 	c := api.NewClient(url)
-	err := c.SendDiagnostics("vim", diagnostics...)
+	err := c.SendDiagnostics(t.Context(), "vim", false, diagnostics...)
 	require.NoError(t, err)
 
-	assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+	assert.Equal(t, 1, numCalls)
+}
+
+func TestClient_SendDiagnostics_ErrorBranches(t *testing.T) {
+	c := api.NewClient("http://example.test")
+	err := c.SendDiagnostics(t.Context(), "vim", false, diagnostic.Diagnostic{Type: diagnostic.TypeUnknown})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown diagnostic type")
+
+	c = api.NewClient("%")
+	err = c.SendDiagnostics(t.Context(), "vim", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create request")
+
+	url, router, closeServer := setupTestServer()
+	defer closeServer()
+
+	router.HandleFunc("/plugins/errors", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("bad gateway"))
+	})
+
+	c = api.NewClient(url)
+	err = c.SendDiagnostics(t.Context(), "vim", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid response status")
+
+	closedURL, _, closeClosedServer := setupTestServer()
+	closeClosedServer()
+
+	c = api.NewClient(closedURL)
+	err = c.SendDiagnostics(t.Context(), "vim", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed making request")
 }

@@ -1,17 +1,18 @@
 package deps
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"regexp"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	lp "github.com/alecthomas/chroma/lexers/p"
+	"github.com/wakatime/wakatime-cli/pkg/file"
+	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 )
 
-// nolint:noglobal
 var pythonExcludeRegex = regexp.MustCompile(`(?i)^(os|sys|__[a-z]+__)$`)
 
 // StatePython is a token parsing state.
@@ -29,34 +30,34 @@ const (
 // ParserPython is a dependency parser for the python programming language.
 // It is not thread safe.
 type ParserPython struct {
-	Parenthesis int
-	State       StatePython
-	Output      []string
+	State  StatePython
+	Buffer string
+	Output []string
 }
 
 // Parse parses dependencies from Python file content using the chroma Python lexer.
-func (p *ParserPython) Parse(filepath string) ([]string, error) {
-	reader, err := os.Open(filepath)
+func (p *ParserPython) Parse(ctx context.Context, filepath string) ([]string, error) {
+	head, err := file.ReadHead(ctx, filepath, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %s", filepath, err)
+		return nil, fmt.Errorf("failed to read: %s", err)
 	}
-
-	defer reader.Close()
 
 	p.init()
 	defer p.init()
 
-	data, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read from reader: %s", err)
+	l := lexers.Get(heartbeat.LanguagePython.String())
+	if l == nil {
+		return nil, fmt.Errorf("failed to get lexer for %s", heartbeat.LanguagePython.String())
 	}
 
-	iter, err := lp.Python.Tokenise(nil, string(data))
+	iter, err := l.Tokenise(nil, string(head))
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize file content: %s", err)
 	}
 
-	for _, token := range iter.Tokens() {
+	t := iter.Tokens()
+
+	for _, token := range t {
 		p.processToken(token)
 	}
 
@@ -83,7 +84,6 @@ func (p *ParserPython) append(dep string) {
 }
 
 func (p *ParserPython) init() {
-	p.Parenthesis = 0
 	p.State = StatePythonUnknown
 	p.Output = []string{}
 }
@@ -92,8 +92,14 @@ func (p *ParserPython) processToken(token chroma.Token) {
 	switch token.Type {
 	case chroma.KeywordNamespace:
 		p.processKeywordNamespace(token.Value)
+	case chroma.Keyword:
+		p.processKeyword(token.Value)
 	case chroma.NameNamespace:
 		p.processNameNamespace(token.Value)
+	case chroma.Operator:
+		p.processOperator(token.Value)
+	case chroma.Text:
+		p.processText(token.Value)
 	}
 }
 
@@ -108,13 +114,40 @@ func (p *ParserPython) processKeywordNamespace(value string) {
 	}
 }
 
+func (p *ParserPython) processKeyword(value string) {
+	if p.State == StatePythonImport && value == "as" {
+		p.append(p.Buffer)
+		p.Buffer = ""
+		p.State = StatePythonUnknown
+	}
+}
+
 func (p *ParserPython) processNameNamespace(value string) {
-	switch p.State {
-	case StatePythonFrom:
-		p.append(value)
-	case StatePythonImport:
-		p.append(value)
+	switch p.State { // nolint:exhaustive
+	case StatePythonFrom, StatePythonImport:
+		p.Buffer += value
 	default:
+		p.State = StatePythonUnknown
+	}
+}
+
+func (p *ParserPython) processOperator(value string) {
+	if value != "," && p.State != StatePythonImport {
+		return
+	}
+
+	p.append(p.Buffer)
+	p.Buffer = ""
+}
+
+func (p *ParserPython) processText(value string) {
+	if p.State != StatePythonImport && p.State != StatePythonFrom {
+		return
+	}
+
+	if value == "\n" {
+		p.append(p.Buffer)
+		p.Buffer = ""
 		p.State = StatePythonUnknown
 	}
 }

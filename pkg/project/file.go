@@ -1,15 +1,20 @@
 package project
 
 import (
-	"bufio"
+	"context"
 	"fmt"
-	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/wakatime/wakatime-cli/pkg/file"
 	"github.com/wakatime/wakatime-cli/pkg/log"
 )
 
-const defaultProjectFile = ".wakatime-project"
+const (
+	// projectPlaceholder is the placeholder string that will be replaced
+	// with the auto-detected project name from revision control.
+	projectPlaceholder = "{project}"
+)
 
 // File contains file data.
 type File struct {
@@ -19,21 +24,24 @@ type File struct {
 // Detect get information from a .wakatime-project file about the project for
 // a given file. First line of .wakatime-project sets the project
 // name. Second line sets the current branch name.
-func (f File) Detect() (Result, bool, error) {
-	log.Debugln("execute file project detection")
-
-	fp, ok := FindFileOrDirectory(f.Filepath, "", defaultProjectFile)
-	if !ok {
+func (f File) Detect(ctx context.Context) (Result, bool, error) {
+	fp, found := FindFileOrDirectory(ctx, f.Filepath, WakaTimeProjectFile)
+	if !found {
 		return Result{}, false, nil
 	}
 
-	lines, err := readFile(fp)
+	logger := log.Extract(ctx)
+	logger.Debugf("wakatime project file found at: %s", fp)
+
+	lines, err := file.ReadLines(ctx, fp, 2)
 	if err != nil {
-		return Result{}, false,
-			Err(fmt.Sprintf("error reading file: %s", err))
+		return Result{}, false, fmt.Errorf("error reading file: %s", err)
 	}
 
-	result := Result{}
+	result := Result{
+		Folder:  filepath.Dir(fp),
+		Project: filepath.Base(filepath.Dir(fp)),
+	}
 
 	if len(lines) > 0 {
 		result.Project = strings.TrimSpace(lines[0])
@@ -46,38 +54,7 @@ func (f File) Detect() (Result, bool, error) {
 	return result, true, nil
 }
 
-// fileExists checks if a file or directory exist.
-func fileExists(fp string) bool {
-	_, err := os.Stat(fp)
-	return err == nil || os.IsExist(err)
-}
-
-// readFile reads a file and return an array of lines.
-func readFile(fp string) ([]string, error) {
-	if fp == "" {
-		return nil, Err("filepath cannot be empty")
-	}
-
-	file, err := os.Open(fp)
-	if err != nil {
-		return nil, Err(fmt.Errorf("failed while opening file %q: %w", fp, err).Error())
-	}
-
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	scanner.Split(bufio.ScanLines)
-
-	var lines []string
-
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-
-	return lines, nil
-}
-
-// String returns its name.
-func (f File) String() string {
-	return "project-file-detector"
+// ID returns its id.
+func (File) ID() DetectorID {
+	return FileDetector
 }

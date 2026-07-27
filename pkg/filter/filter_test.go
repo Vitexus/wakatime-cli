@@ -1,8 +1,8 @@
 package filter_test
 
 import (
+	"context"
 	"errors"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,34 +16,32 @@ import (
 )
 
 func TestWithFiltering(t *testing.T) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "")
 	require.NoError(t, err)
 
-	defer os.RemoveAll(tmpDir)
-
-	tmpFile, err := ioutil.TempFile(tmpDir, "")
-	require.NoError(t, err)
+	defer tmpFile.Close()
 
 	first := testHeartbeat()
 	first.Entity = tmpFile.Name()
+
 	second := testHeartbeat()
 	second.Time++
 
 	opt := filter.WithFiltering(filter.Config{})
-	h := opt(func(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+	h := opt(func(_ context.Context, hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
 		assert.Equal(t, []heartbeat.Heartbeat{
 			{
-				Branch:         heartbeat.String("heartbeat"),
-				Category:       heartbeat.CodingCategory,
-				CursorPosition: heartbeat.Int(12),
+				Branch:         heartbeat.PointerTo("heartbeat"),
+				Category:       heartbeat.CodingCategory.String(),
+				CursorPosition: heartbeat.PointerTo(12),
 				Dependencies:   []string{"dep1", "dep2"},
 				Entity:         tmpFile.Name(),
 				EntityType:     heartbeat.FileType,
-				IsWrite:        heartbeat.Bool(true),
-				Language:       heartbeat.String("Go"),
-				LineNumber:     heartbeat.Int(42),
-				Lines:          heartbeat.Int(100),
-				Project:        heartbeat.String("wakatime"),
+				IsWrite:        heartbeat.PointerTo(true),
+				Language:       heartbeat.PointerTo("Go"),
+				LineNumber:     heartbeat.PointerTo(42),
+				Lines:          heartbeat.PointerTo(100),
+				Project:        heartbeat.PointerTo("wakatime"),
 				Time:           1585598060,
 				UserAgent:      "wakatime/13.0.7",
 			},
@@ -56,7 +54,7 @@ func TestWithFiltering(t *testing.T) {
 		}, nil
 	})
 
-	result, err := h([]heartbeat.Heartbeat{first, second})
+	result, err := h(t.Context(), []heartbeat.Heartbeat{first, second})
 	require.NoError(t, err)
 
 	assert.Equal(t, []heartbeat.Result{
@@ -66,31 +64,28 @@ func TestWithFiltering(t *testing.T) {
 	}, result)
 }
 
-func TestWithFiltering_AbortAllFiltered(t *testing.T) {
-	opt := filter.WithFiltering(filter.Config{})
-	h := opt(func(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
-		return []heartbeat.Result{}, errors.New("this will should never be called")
+func TestWithLengthValidator(t *testing.T) {
+	opt := filter.WithLengthValidator()
+	h := opt(func(_ context.Context, _ []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+		return []heartbeat.Result{}, errors.New("this should never be called")
 	})
 
-	result, err := h([]heartbeat.Heartbeat{testHeartbeat()})
+	result, err := h(t.Context(), []heartbeat.Heartbeat{})
 	require.NoError(t, err)
 
 	assert.Equal(t, result, []heartbeat.Result{})
 }
 
 func TestFilter(t *testing.T) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "")
 	require.NoError(t, err)
 
-	defer os.RemoveAll(tmpDir)
-
-	tmpFile, err := ioutil.TempFile(tmpDir, "")
-	require.NoError(t, err)
+	defer tmpFile.Close()
 
 	h := testHeartbeat()
 	h.Entity = tmpFile.Name()
 
-	err = filter.Filter(h, filter.Config{})
+	err = filter.Filter(t.Context(), h, filter.Config{})
 	require.NoError(t, err)
 }
 
@@ -99,25 +94,30 @@ func TestFilter_NonFileTypeEmptyEntity(t *testing.T) {
 	h.Entity = ""
 	h.EntityType = heartbeat.AppType
 
-	err := filter.Filter(h, filter.Config{
-		ExcludeUnknownProject: true,
-	})
+	err := filter.Filter(t.Context(), h, filter.Config{})
+	require.NoError(t, err)
+}
+
+func TestFilter_IsUnsavedEntity(t *testing.T) {
+	h := testHeartbeat()
+	h.Entity = "nonexisting"
+	h.EntityType = heartbeat.FileType
+	h.IsUnsavedEntity = true
+
+	err := filter.Filter(t.Context(), h, filter.Config{})
 	require.NoError(t, err)
 }
 
 func TestFilter_IncludeMatchOverwritesExcludeMatch(t *testing.T) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "")
 	require.NoError(t, err)
 
-	defer os.RemoveAll(tmpDir)
-
-	tmpFile, err := ioutil.TempFile(tmpDir, "")
-	require.NoError(t, err)
+	defer tmpFile.Close()
 
 	h := testHeartbeat()
 	h.Entity = tmpFile.Name()
 
-	err = filter.Filter(h, filter.Config{
+	err = filter.Filter(t.Context(), h, filter.Config{
 		Exclude: []regex.Regex{
 			regex.MustCompile(".*main.go$"),
 		},
@@ -129,128 +129,93 @@ func TestFilter_IncludeMatchOverwritesExcludeMatch(t *testing.T) {
 }
 
 func TestFilter_ErrMatchesExcludePattern(t *testing.T) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "exclude-this-file")
 	require.NoError(t, err)
 
-	defer os.RemoveAll(tmpDir)
-
-	tmpFile, err := ioutil.TempFile(tmpDir, "exclude-this-file")
-	require.NoError(t, err)
+	defer tmpFile.Close()
 
 	h := testHeartbeat()
 	h.Entity = tmpFile.Name()
 
-	err = filter.Filter(h, filter.Config{
+	err = filter.Filter(t.Context(), h, filter.Config{
 		Exclude: []regex.Regex{
 			regex.MustCompile("^.*exclude-this-file.*$"),
 		},
 	})
 
-	var errv filter.Err
-
-	assert.True(t, errors.As(err, &errv))
-	assert.Equal(t, filter.Err("skipping because matches exclude pattern \"^.*exclude-this-file.*$\""), errv)
-}
-
-func TestFilter_ErrUnknownProject(t *testing.T) {
-	tests := map[string]*string{
-		"nil":          nil,
-		"empty string": heartbeat.String(""),
-	}
-
-	for name, projectValue := range tests {
-		t.Run(name, func(t *testing.T) {
-			tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime")
-			require.NoError(t, err)
-
-			defer os.RemoveAll(tmpDir)
-
-			tmpFile, err := ioutil.TempFile(tmpDir, "")
-			require.NoError(t, err)
-
-			h := testHeartbeat()
-			h.Entity = tmpFile.Name()
-			h.Project = projectValue
-
-			err = filter.Filter(h, filter.Config{
-				ExcludeUnknownProject: true,
-			})
-			var errv filter.Err
-			assert.True(t, errors.As(err, &errv))
-
-			assert.Equal(t, filter.Err("skipping because of unknown project"), errv)
-		})
-	}
+	assert.EqualError(t, err, "filter by pattern: skipping because matches exclude pattern \"^.*exclude-this-file.*$\"")
 }
 
 func TestFilter_ErrNonExistingFile(t *testing.T) {
 	h := testHeartbeat()
 
-	err := filter.Filter(h, filter.Config{})
+	err := filter.Filter(t.Context(), h, filter.Config{})
 
-	var errv filter.Err
-
-	assert.True(t, errors.As(err, &errv))
-	assert.Equal(t, filter.Err("skipping because of non-existing file \"/tmp/main.go\""), errv)
+	assert.EqualError(t, err, "filter file: skipping because of non-existing file \"/tmp/main.go\"")
 }
 
 func TestFilter_ExistingProjectFile(t *testing.T) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime")
+	tmpDir := t.TempDir()
+
+	tmpFile, err := os.CreateTemp(tmpDir, "")
 	require.NoError(t, err)
 
-	defer os.RemoveAll(tmpDir)
+	defer tmpFile.Close()
 
-	tmpFile, err := ioutil.TempFile(tmpDir, "")
+	tmpFile2, err := os.Create(filepath.Join(tmpDir, ".wakatime-project"))
 	require.NoError(t, err)
 
-	_, err = os.Create(filepath.Join(tmpDir, ".wakatime-project"))
-	require.NoError(t, err)
+	defer tmpFile2.Close()
 
 	h := testHeartbeat()
 	h.Entity = tmpFile.Name()
 
-	err = filter.Filter(h, filter.Config{
+	err = filter.Filter(t.Context(), h, filter.Config{
 		IncludeOnlyWithProjectFile: true,
 	})
+	require.NoError(t, err)
+}
+
+func TestFilter_RemoteFileSkipsFiltering(t *testing.T) {
+	h := testHeartbeat()
+	h.LocalFile = h.Entity
+	h.Entity = "ssh://wakatime:1234@192.168.1.1/path/to/remote/main.go"
+
+	err := filter.Filter(t.Context(), h, filter.Config{})
 	require.NoError(t, err)
 }
 
 func TestFilter_ErrNonExistingProjectFile(t *testing.T) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "")
 	require.NoError(t, err)
 
-	defer os.RemoveAll(tmpDir)
-
-	tmpFile, err := ioutil.TempFile(tmpDir, "")
-	require.NoError(t, err)
+	defer tmpFile.Close()
 
 	h := testHeartbeat()
 	h.Entity = tmpFile.Name()
 
-	err = filter.Filter(h, filter.Config{
+	err = filter.Filter(t.Context(), h, filter.Config{
 		IncludeOnlyWithProjectFile: true,
 	})
 
-	var errv filter.Err
-
-	assert.True(t, errors.As(err, &errv))
-	assert.Equal(t, filter.Err("skipping because of missing .wakatime-project file in parent path"), errv)
+	assert.EqualError(t, err, "filter file: skipping because missing .wakatime-project file in parent path")
 }
 
 func testHeartbeat() heartbeat.Heartbeat {
 	return heartbeat.Heartbeat{
-		Branch:         heartbeat.String("heartbeat"),
-		Category:       heartbeat.CodingCategory,
-		CursorPosition: heartbeat.Int(12),
-		Dependencies:   []string{"dep1", "dep2"},
-		Entity:         "/tmp/main.go",
-		EntityType:     heartbeat.FileType,
-		IsWrite:        heartbeat.Bool(true),
-		Language:       heartbeat.String("Go"),
-		LineNumber:     heartbeat.Int(42),
-		Lines:          heartbeat.Int(100),
-		Project:        heartbeat.String("wakatime"),
-		Time:           1585598060,
-		UserAgent:      "wakatime/13.0.7",
+		Branch:          heartbeat.PointerTo("heartbeat"),
+		Category:        heartbeat.CodingCategory.String(),
+		CursorPosition:  heartbeat.PointerTo(12),
+		Dependencies:    []string{"dep1", "dep2"},
+		Entity:          "/tmp/main.go",
+		EntityType:      heartbeat.FileType,
+		IsWrite:         heartbeat.PointerTo(true),
+		Language:        heartbeat.PointerTo("Go"),
+		LineNumber:      heartbeat.PointerTo(42),
+		Lines:           heartbeat.PointerTo(100),
+		Project:         heartbeat.PointerTo("wakatime"),
+		Time:            1585598060,
+		UserAgent:       "wakatime/13.0.7",
+		IsUnsavedEntity: false,
 	}
 }

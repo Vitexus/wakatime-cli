@@ -1,14 +1,16 @@
 package api
 
 import (
+	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/wakatime/wakatime-cli/pkg/file"
 	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
 	"github.com/wakatime/wakatime-cli/pkg/log"
 
@@ -34,21 +36,10 @@ func WithAuth(auth BasicAuth) (Option, error) {
 	}, nil
 }
 
-// WithHostname sets the X-Machine-Name header to the passed in hostname.
-func WithHostname(hostname string) Option {
-	return func(c *Client) {
-		next := c.doFunc
-		c.doFunc = func(c *Client, req *http.Request) (*http.Response, error) {
-			req.Header.Set("X-Machine-Name", hostname)
-			return next(c, req)
-		}
-	}
-}
-
 // WithDisableSSLVerify disables verification of insecure certificates.
 func WithDisableSSLVerify() Option {
 	return func(c *Client) {
-		var transport *http.Transport = LazyCreateNewTransport(c)
+		transport := LazyCreateNewTransport(c)
 
 		tlsConfig := transport.TLSClientConfig
 		tlsConfig.InsecureSkipVerify = true
@@ -83,29 +74,32 @@ func WithNTLM(creds string) (Option, error) {
 		withAuth(c)
 
 		c.client.Transport = ntlmssp.Negotiator{
-			RoundTripper: LazyCreateNewTransport(c),
+			AllowBasicAuth: true,
+			RoundTripper:   LazyCreateNewTransport(c),
 		}
 	}, nil
 }
 
 // WithNTLMRequestRetry will, upon request failure, retry with ntlm authentication.
-func WithNTLMRequestRetry(creds string) (Option, error) {
+func WithNTLMRequestRetry(ctx context.Context, creds string) (Option, error) {
 	withNTLM, err := WithNTLM(creds)
 	if err != nil {
 		return Option(func(*Client) {}), err
 	}
 
 	return func(c *Client) {
+		logger := log.Extract(ctx)
+
 		next := c.doFunc
 		c.doFunc = func(cl *Client, req *http.Request) (*http.Response, error) {
 			resp, err := next(c, req)
 			if err != nil {
-				log.Errorf("request to api failed with error %q. Will retry with ntlm auth", err)
+				logger.Errorf("request to api failed with error %q. Will retry with ntlm auth", err)
 
 				clCopy := cl
 				withNTLM(clCopy)
 
-				return clCopy.Do(req)
+				return clCopy.Do(ctx, req)
 			}
 
 			return resp, nil
@@ -121,15 +115,74 @@ func WithProxy(proxyURL string) (Option, error) {
 	}
 
 	return func(c *Client) {
-		var transport *http.Transport = LazyCreateNewTransport(c)
+		transport := LazyCreateNewTransport(c)
 		transport.Proxy = http.ProxyURL(u)
 		c.client.Transport = transport
+
+		if !strings.EqualFold(u.Scheme, "https") {
+			return
+		}
+
+		httpProxyURL := *u
+		httpProxyURL.Scheme = "http"
+
+		next := c.doFunc
+		c.doFunc = func(c *Client, req *http.Request) (*http.Response, error) {
+			resp, err := next(c, req)
+			if err == nil || !shouldRetryProxyWithHTTP(err) {
+				return resp, err
+			}
+
+			reqRetry, retryErr := cloneRequest(req)
+			if retryErr != nil {
+				return nil, err
+			}
+
+			transport := LazyCreateNewTransport(c)
+			transport.Proxy = http.ProxyURL(&httpProxyURL)
+
+			previousTransport := c.client.Transport
+			c.client.Transport = transport
+
+			defer func() {
+				c.client.Transport = previousTransport
+			}()
+
+			return next(c, reqRetry)
+		}
 	}, nil
 }
 
+func shouldRetryProxyWithHTTP(err error) bool {
+	msg := err.Error()
+
+	return strings.Contains(msg, "proxyconnect tcp:") ||
+		strings.Contains(msg, "server gave HTTP response to HTTPS client")
+}
+
+func cloneRequest(req *http.Request) (*http.Request, error) {
+	reqRetry := req.Clone(req.Context())
+	if req.Body == nil {
+		return reqRetry, nil
+	}
+
+	if req.GetBody == nil {
+		return nil, errors.New("request body is not replayable")
+	}
+
+	body, err := req.GetBody()
+	if err != nil {
+		return nil, err
+	}
+
+	reqRetry.Body = body
+
+	return reqRetry, nil
+}
+
 // WithSSLCertFile overrides the default CA certs file to trust specified cert file.
-func WithSSLCertFile(filepath string) (Option, error) {
-	caCert, err := ioutil.ReadFile(filepath)
+func WithSSLCertFile(ctx context.Context, filepath string) (Option, error) {
+	caCert, err := file.ReadHead(ctx, filepath, 0) // nolint:gosec
 	if err != nil {
 		return nil, err
 	}
@@ -137,19 +190,21 @@ func WithSSLCertFile(filepath string) (Option, error) {
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(caCert)
 
-	return WithSSLCertPool(caCertPool)
+	return WithSSLCertPool(caCertPool), nil
 }
 
 // WithSSLCertPool overrides the default CA cert pool to trust specified cert pool.
-func WithSSLCertPool(caCertPool *x509.CertPool) (Option, error) {
+func WithSSLCertPool(caCertPool *x509.CertPool) Option {
 	return func(c *Client) {
-		var transport *http.Transport = LazyCreateNewTransport(c)
+		transport := LazyCreateNewTransport(c)
+
 		tlsConfig := transport.TLSClientConfig
 		tlsConfig.RootCAs = caCertPool
+
 		transport.TLSClientConfig = tlsConfig
 
 		c.client.Transport = transport
-	}, nil
+	}
 }
 
 // WithTimeout configures a timeout for all requests.
@@ -159,21 +214,41 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithUserAgentUnknownPlugin sets the User-Agent header on all requests,
-// including default value for plugin.
-func WithUserAgentUnknownPlugin() Option {
-	return WithUserAgent("Unknown/0")
+// WithHostname sets the X-Machine-Name header to the passed in hostname.
+func WithHostname(hostname string) Option {
+	return func(c *Client) {
+		next := c.doFunc
+		c.doFunc = func(c *Client, req *http.Request) (*http.Response, error) {
+			hostname = url.QueryEscape(hostname)
+			req.Header.Set("X-Machine-Name", hostname)
+
+			return next(c, req)
+		}
+	}
+}
+
+// WithTimezone sets the TimeZone header to the passed in timezone.
+func WithTimezone(timezone string) Option {
+	return func(c *Client) {
+		next := c.doFunc
+		c.doFunc = func(c *Client, req *http.Request) (*http.Response, error) {
+			req.Header.Set("Timezone", timezone)
+
+			return next(c, req)
+		}
+	}
 }
 
 // WithUserAgent sets the User-Agent header on all requests, including the passed
 // in value for plugin.
-func WithUserAgent(plugin string) Option {
-	userAgent := heartbeat.UserAgent(plugin)
+func WithUserAgent(ctx context.Context, plugin string) Option {
+	userAgent := heartbeat.UserAgent(ctx, plugin)
 
 	return func(c *Client) {
 		next := c.doFunc
 		c.doFunc = func(c *Client, req *http.Request) (*http.Response, error) {
 			req.Header.Set("User-Agent", userAgent)
+
 			return next(c, req)
 		}
 	}

@@ -12,7 +12,7 @@ import (
 func TestParserRust_Parse(t *testing.T) {
 	parser := deps.ParserRust{}
 
-	dependencies, err := parser.Parse("testdata/rust.rs")
+	dependencies, err := parser.Parse(t.Context(), "testdata/rust.rs")
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{

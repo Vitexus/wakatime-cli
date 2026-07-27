@@ -1,14 +1,16 @@
 package deps
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"regexp"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/lexers/j"
+	"github.com/wakatime/wakatime-cli/pkg/file"
+	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 )
 
 var javaExcludeRegex = regexp.MustCompile(`(?i)^(java\..*|javax\..*)`)
@@ -29,28 +31,26 @@ const (
 // It is not thread safe.
 type ParserJava struct {
 	Buffer string
-	State  StateJava
 	Output []string
+	State  StateJava
 }
 
 // Parse parses dependencies from Java file content using the chroma Java lexer.
-func (p *ParserJava) Parse(filepath string) ([]string, error) {
-	reader, err := os.Open(filepath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %s", filepath, err)
-	}
-
-	defer reader.Close()
-
+func (p *ParserJava) Parse(ctx context.Context, filepath string) ([]string, error) {
 	p.init()
 	defer p.init()
 
-	data, err := ioutil.ReadAll(reader)
+	head, err := file.ReadHead(ctx, filepath, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read from reader: %s", err)
+		return nil, fmt.Errorf("failed to read: %s", err)
 	}
 
-	iter, err := j.Java.Tokenise(nil, string(data))
+	l := lexers.Get(heartbeat.LanguageJava.String())
+	if l == nil {
+		return nil, fmt.Errorf("failed to get lexer for %s", heartbeat.LanguageJava.String())
+	}
+
+	iter, err := l.Tokenise(nil, string(head))
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize file content: %s", err)
 	}
@@ -75,6 +75,7 @@ func (p *ParserJava) append(dep string) {
 }
 
 func (p *ParserJava) init() {
+	p.Buffer = ""
 	p.State = StateJavaUnknown
 	p.Output = nil
 }
@@ -89,8 +90,8 @@ func (p *ParserJava) processToken(token chroma.Token) {
 		p.processNameAttribute(token.Value)
 	case chroma.NameNamespace:
 		p.processNameNamespace(token.Value)
-	case chroma.Operator:
-		p.processOperator(token.Value)
+	case chroma.Punctuation:
+		p.processPunctuation(token.Value)
 	}
 }
 
@@ -157,7 +158,7 @@ func (p *ParserJava) processNameNamespace(value string) {
 	}
 }
 
-func (p *ParserJava) processOperator(value string) {
+func (p *ParserJava) processPunctuation(value string) {
 	if value == ";" {
 		p.State = StateJavaImportFinished
 		p.processKeywordNamespace(p.Buffer)

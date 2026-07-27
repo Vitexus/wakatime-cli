@@ -1,7 +1,6 @@
 package project_test
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,14 +12,13 @@ import (
 )
 
 func TestMercurial_Detect(t *testing.T) {
-	fp, tearDown := setupTestMercurial(t)
-	defer tearDown()
+	fp := setupTestMercurial(t)
 
 	m := project.Mercurial{
 		Filepath: filepath.Join(fp, "wakatime-cli/src/pkg/file.go"),
 	}
 
-	result, detected, err := m.Detect()
+	result, detected, err := m.Detect(t.Context())
 	require.NoError(t, err)
 
 	assert.True(t, detected)
@@ -33,14 +31,13 @@ func TestMercurial_Detect(t *testing.T) {
 }
 
 func TestMercurial_Detect_BranchWithSlash(t *testing.T) {
-	fp, tearDown := setupTestMercurialBranchWithSlash(t)
-	defer tearDown()
+	fp := setupTestMercurialBranchWithSlash(t)
 
 	m := project.Mercurial{
 		Filepath: filepath.Join(fp, "wakatime-cli/src/pkg/file.go"),
 	}
 
-	result, detected, err := m.Detect()
+	result, detected, err := m.Detect(t.Context())
 	require.NoError(t, err)
 
 	assert.True(t, detected)
@@ -53,14 +50,13 @@ func TestMercurial_Detect_BranchWithSlash(t *testing.T) {
 }
 
 func TestMercurial_Detect_NoBranch(t *testing.T) {
-	fp, tearDown := setupTestMercurialNoBranch(t)
-	defer tearDown()
+	fp := setupTestMercurialNoBranch(t)
 
 	m := project.Mercurial{
 		Filepath: filepath.Join(fp, "wakatime-cli/src/pkg/file.go"),
 	}
 
-	result, detected, err := m.Detect()
+	result, detected, err := m.Detect(t.Context())
 	require.NoError(t, err)
 
 	assert.True(t, detected)
@@ -72,11 +68,16 @@ func TestMercurial_Detect_NoBranch(t *testing.T) {
 	}, result)
 }
 
-func setupTestMercurial(t *testing.T) (fp string, tearDown func()) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime-hg")
-	require.NoError(t, err)
+func TestMercurial_ID(t *testing.T) {
+	m := project.Mercurial{}
 
-	err = os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
+	assert.Equal(t, project.MercurialDetector, m.ID())
+}
+
+func setupTestMercurial(t *testing.T) (fp string) {
+	tmpDir := t.TempDir()
+
+	err := os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
 	require.NoError(t, err)
 
 	tmpFile, err := os.Create(filepath.Join(tmpDir, "wakatime-cli/src/pkg/file.go"))
@@ -89,14 +90,13 @@ func setupTestMercurial(t *testing.T) (fp string, tearDown func()) {
 
 	copyFile(t, "testdata/hg/branch", filepath.Join(tmpDir, "wakatime-cli/.hg/branch"))
 
-	return tmpDir, func() { os.RemoveAll(tmpDir) }
+	return tmpDir
 }
 
-func setupTestMercurialBranchWithSlash(t *testing.T) (fp string, tearDown func()) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime-hg")
-	require.NoError(t, err)
+func setupTestMercurialBranchWithSlash(t *testing.T) (fp string) {
+	tmpDir := t.TempDir()
 
-	err = os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
+	err := os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
 	require.NoError(t, err)
 
 	tmpFile, err := os.Create(filepath.Join(tmpDir, "wakatime-cli/src/pkg/file.go"))
@@ -109,14 +109,13 @@ func setupTestMercurialBranchWithSlash(t *testing.T) (fp string, tearDown func()
 
 	copyFile(t, "testdata/hg/branch_with_slash", filepath.Join(tmpDir, "wakatime-cli/.hg/branch"))
 
-	return tmpDir, func() { os.RemoveAll(tmpDir) }
+	return tmpDir
 }
 
-func setupTestMercurialNoBranch(t *testing.T) (fp string, tearDown func()) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime-hg")
-	require.NoError(t, err)
+func setupTestMercurialNoBranch(t *testing.T) (fp string) {
+	tmpDir := t.TempDir()
 
-	err = os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
+	err := os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
 	require.NoError(t, err)
 
 	tmpFile, err := os.Create(filepath.Join(tmpDir, "wakatime-cli/src/pkg/file.go"))
@@ -127,5 +126,5 @@ func setupTestMercurialNoBranch(t *testing.T) (fp string, tearDown func()) {
 	err = os.Mkdir(filepath.Join(tmpDir, "wakatime-cli/.hg"), os.FileMode(int(0700)))
 	require.NoError(t, err)
 
-	return tmpDir, func() { os.RemoveAll(tmpDir) }
+	return tmpDir
 }

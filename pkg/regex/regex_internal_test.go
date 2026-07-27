@@ -10,6 +10,8 @@ import (
 )
 
 func TestRegexp2Wrap_MatchString(t *testing.T) {
+	ctx := t.Context()
+
 	tests := map[string]bool{
 		"gopher":             false,
 		"gophergopher":       true,
@@ -25,12 +27,14 @@ func TestRegexp2Wrap_MatchString(t *testing.T) {
 				rgx: r2,
 			}
 
-			assert.Equal(t, expected, r.MatchString(str))
+			assert.Equal(t, expected, r.MatchString(ctx, str))
 		})
 	}
 }
 
 func TestRegexp2Wrap_FindStringSubmatch(t *testing.T) {
+	ctx := t.Context()
+
 	tests := map[string]struct {
 		String   string
 		Expected []string
@@ -54,7 +58,7 @@ func TestRegexp2Wrap_FindStringSubmatch(t *testing.T) {
 				rgx: r2,
 			}
 
-			matches := r.FindStringSubmatch(test.String)
+			matches := r.FindStringSubmatch(ctx, test.String)
 
 			assert.Equal(t, test.Expected, matches)
 		})

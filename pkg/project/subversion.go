@@ -1,16 +1,19 @@
 package project
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/wakatime/wakatime-cli/pkg/log"
-
-	"github.com/yookoala/realpath"
 )
+
+type svnCommands struct {
+	version         func(string) error
+	info            func(string, string) ([]byte, error)
+	xcodeToolsExist func() bool
+}
 
 // Subversion contains svn data.
 type Subversion struct {
@@ -19,34 +22,36 @@ type Subversion struct {
 }
 
 // Detect gets information about the svn project for a given file.
-func (s Subversion) Detect() (Result, bool, error) {
-	log.Debugln("execute subversion project detection")
+func (s Subversion) Detect(ctx context.Context) (Result, bool, error) {
+	return s.detect(ctx, svnCommands{
+		version:         svnVersion,
+		info:            svnInfoOutput,
+		xcodeToolsExist: hasXcodeTools,
+	})
+}
 
-	binary, ok := findSvnBinary()
+func (s Subversion) detect(ctx context.Context, commands svnCommands) (Result, bool, error) {
+	binary, ok := findSvnBinary(commands)
 	if !ok {
-		log.Debugln("svn binary not found")
 		return Result{}, false, nil
 	}
 
-	fp, err := realpath.Realpath(s.Filepath)
-	if err != nil {
-		return Result{}, false, Err(fmt.Errorf("failed to get the real path: %w", err).Error())
-	}
+	var fp string
 
 	// Take only the directory
-	if fileExists(fp) {
-		fp = filepath.Dir(fp)
+	if fileOrDirExists(s.Filepath) {
+		fp = filepath.Dir(s.Filepath)
 	}
 
 	// Find for .svn/wc.db file
-	svnConfigFile, ok := FindFileOrDirectory(fp, ".svn", "wc.db")
-	if !ok {
+	svnConfigFile, found := FindFileOrDirectory(ctx, fp, filepath.Join(".svn", "wc.db"))
+	if !found {
 		return Result{}, false, nil
 	}
 
-	info, ok, err := svnInfo(filepath.Join(svnConfigFile, "../.."), binary)
+	info, ok, err := svnInfo(filepath.Join(svnConfigFile, "..", ".."), binary, commands)
 	if err != nil {
-		return Result{}, false, Err(fmt.Errorf("failed to get svn info: %w", err).Error())
+		return Result{}, false, fmt.Errorf("failed to get svn info: %s", err)
 	}
 
 	if !ok {
@@ -60,16 +65,22 @@ func (s Subversion) Detect() (Result, bool, error) {
 	}, true, nil
 }
 
-func svnInfo(fp string, binary string) (map[string]string, bool, error) {
-	if runtime.GOOS == "darwin" && !hasXcodeTools() {
+func svnVersion(loc string) error {
+	return exec.Command(loc, "--version").Run() //nolint:gosec
+}
+
+func svnInfoOutput(binary, fp string) ([]byte, error) {
+	return exec.Command(binary, "info", fp).Output() //nolint:gosec
+}
+
+func svnInfo(fp string, binary string, commands svnCommands) (map[string]string, bool, error) {
+	if runtime.GOOS == "darwin" && !commands.xcodeToolsExist() {
 		return nil, false, nil
 	}
 
-	cmd := exec.Command(binary, "info", fp)
-	out, err := cmd.Output()
-
+	out, err := commands.info(binary, fp)
 	if err != nil {
-		return nil, false, Err(fmt.Sprintf("error getting svn info: %s", err))
+		return nil, false, fmt.Errorf("error getting svn info: %s", err)
 	}
 
 	result := map[string]string{}
@@ -84,7 +95,7 @@ func svnInfo(fp string, binary string) (map[string]string, bool, error) {
 	return result, true, nil
 }
 
-func findSvnBinary() (string, bool) {
+func findSvnBinary(commands svnCommands) (string, bool) {
 	locations := []string{
 		"svn",
 		"/usr/bin/svn",
@@ -92,11 +103,7 @@ func findSvnBinary() (string, bool) {
 	}
 
 	for _, loc := range locations {
-		cmd := exec.Command(loc, "--version")
-
-		err := cmd.Run()
-		if err != nil {
-			log.Debugf("failed while calling %s --version: %s", loc, err)
+		if err := commands.version(loc); err != nil {
 			continue
 		}
 
@@ -125,7 +132,7 @@ func resolveSvnInfo(info map[string]string, key string) string {
 	return ""
 }
 
-// String returns its name.
-func (s Subversion) String() string {
-	return "svn-detector"
+// ID returns its id.
+func (Subversion) ID() DetectorID {
+	return SubversionDetector
 }

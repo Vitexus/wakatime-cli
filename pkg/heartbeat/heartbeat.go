@@ -1,112 +1,188 @@
 package heartbeat
 
 import (
+	"context"
 	"fmt"
-	"path/filepath"
+	"os"
+	"regexp"
 	"runtime"
 	"strings"
 
 	"github.com/wakatime/wakatime-cli/pkg/log"
+	"github.com/wakatime/wakatime-cli/pkg/system"
 	"github.com/wakatime/wakatime-cli/pkg/version"
-	"github.com/wakatime/wakatime-cli/pkg/windows"
 
 	"github.com/matishsiao/goInfo"
-	"github.com/yookoala/realpath"
 )
+
+// remoteAddressRegex is a pattern for (ssh|sftp)://user:pass@host:port.
+var remoteAddressRegex = regexp.MustCompile(`(?i)^((ssh|sftp)://)+(?P<credentials>[^:@]+(:([^:@])+)?@)?[^:]+(:\d+)?`)
 
 // Heartbeat is a structure representing activity for a user on a some entity.
 type Heartbeat struct {
-	Branch            *string    `json:"branch"`
-	Category          Category   `json:"category"`
-	CursorPosition    *int       `json:"cursorpos"`
-	Dependencies      []string   `json:"dependencies"`
-	Entity            string     `json:"entity"`
-	EntityType        EntityType `json:"type"`
-	IsWrite           *bool      `json:"is_write"`
-	Language          *string    `json:"language"`
-	LanguageAlternate string     `json:"-"`
-	LineNumber        *int       `json:"lineno"`
-	Lines             *int       `json:"lines"`
-	LocalFile         string     `json:"-"`
-	Project           *string    `json:"project"`
-	ProjectAlternate  string     `json:"-"`
-	ProjectOverride   string     `json:"-"`
-	Time              float64    `json:"time"`
-	UserAgent         string     `json:"user_agent"`
+	AILineChanges         *int       `json:"ai_line_changes,omitempty"`
+	AISession             string     `json:"ai_session,omitempty"`
+	AISubscriptionPlan    string     `json:"ai_subscription_plan,omitempty"`
+	AIInputTokens         int64      `json:"ai_input_tokens,omitempty"`
+	AIOutputTokens        int64      `json:"ai_output_tokens,omitempty"`
+	AIPromptLength        int        `json:"ai_prompt_length,omitempty"`
+	APIKey                string     `json:"-"`
+	APIURL                string     `json:"-"`
+	Branch                *string    `json:"branch,omitempty"`
+	BranchAlternate       string     `json:"-"`
+	Category              string     `json:"category,omitempty"`
+	CursorPosition        *int       `json:"cursorpos,omitempty"`
+	Dependencies          []string   `json:"dependencies,omitempty"`
+	Entity                string     `json:"entity"`
+	EntityType            EntityType `json:"type"`
+	HumanLineChanges      *int       `json:"human_line_changes,omitempty"`
+	IsUnsavedEntity       bool       `json:"-"`
+	IsWrite               *bool      `json:"is_write,omitempty"`
+	Language              *string    `json:"language,omitempty"`
+	LanguageAlternate     string     `json:"-"`
+	LineNumber            *int       `json:"lineno,omitempty"`
+	Lines                 *int       `json:"lines,omitempty"`
+	LocalFile             string     `json:"-"`
+	LocalFileNeedsCleanup bool       `json:"-"`
+	Project               *string    `json:"project,omitempty"`
+	ProjectAlternate      string     `json:"-"`
+	ProjectFromGitRemote  bool       `json:"-"`
+	ProjectOverride       string     `json:"-"`
+	ProjectPath           string     `json:"-"`
+	ProjectPathOverride   string     `json:"-"`
+	ProjectRootCount      *int       `json:"project_root_count,omitempty"`
+	Time                  float64    `json:"time"`
+	UserAgent             string     `json:"user_agent"`
+}
+
+// AITokens contains the previous and current token counts for calculating the delta input and output AI tokens used
+// since the last heartbeat.
+type AITokens struct {
+	LastInput     int64
+	LastOutput    int64
+	CurrentInput  int64
+	CurrentOutput int64
 }
 
 // New creates a new instance of Heartbeat with formatted entity
 // and local file paths for file type heartbeats.
 func New(
-	category Category,
+	aiLineChanges *int,
+	branchAlternate string,
+	category string,
 	cursorPosition *int,
 	entity string,
 	entityType EntityType,
+	humanLineChanges *int,
+	isUnsavedEntity bool,
 	isWrite *bool,
 	language *string,
 	languageAlternate string,
 	lineNumber *int,
+	lines *int,
 	localFile string,
 	projectAlternate string,
+	projectFromGitRemote bool,
 	projectOverride string,
+	projectPathOverride string,
 	time float64,
 	userAgent string,
 ) Heartbeat {
-	if entityType == FileType {
-		formatted, err := filepath.Abs(entity)
-		if err != nil {
-			log.Warnf("failed to resolve the absolute path of %q: %s", entity, err)
-		} else {
-			entity = formatted
-		}
+	return Heartbeat{
+		AILineChanges:        aiLineChanges,
+		BranchAlternate:      branchAlternate,
+		Category:             category,
+		CursorPosition:       cursorPosition,
+		Entity:               entity,
+		EntityType:           entityType,
+		HumanLineChanges:     humanLineChanges,
+		IsUnsavedEntity:      isUnsavedEntity,
+		IsWrite:              isWrite,
+		Language:             language,
+		LanguageAlternate:    languageAlternate,
+		LineNumber:           lineNumber,
+		Lines:                lines,
+		LocalFile:            localFile,
+		ProjectAlternate:     projectAlternate,
+		ProjectFromGitRemote: projectFromGitRemote,
+		ProjectOverride:      projectOverride,
+		ProjectPathOverride:  projectPathOverride,
+		Time:                 time,
+		UserAgent:            userAgent,
+	}
+}
 
-		formatted, err = realpath.Realpath(entity)
-		if err != nil {
-			log.Warnf("failed to resolve the real path of %q: %s", entity, err)
-		} else {
-			entity = formatted
-		}
+// NewWithAITokens creates a new instance of Heartbeat with formatted entity
+// and local file paths for file type heartbeats.
+func NewWithAITokens(
+	aiLineChanges *int,
+	aiSession string,
+	aiTokens AITokens,
+	branchAlternate string,
+	category string,
+	cursorPosition *int,
+	entity string,
+	entityType EntityType,
+	humanLineChanges *int,
+	isUnsavedEntity bool,
+	isWrite *bool,
+	language *string,
+	languageAlternate string,
+	lineNumber *int,
+	lines *int,
+	localFile string,
+	projectAlternate string,
+	projectFromGitRemote bool,
+	projectOverride string,
+	projectPathOverride string,
+	time float64,
+	userAgent string,
+) Heartbeat {
+	inputTokens := aiTokens.CurrentInput - aiTokens.LastInput
+	if inputTokens < 0 {
+		inputTokens = 0
 	}
 
-	if entityType == FileType && runtime.GOOS == "windows" {
-		formatted, err := windows.FormatFilePath(entity)
-		if err != nil {
-			log.Warnf("failed to format windows file path: %q: %s", entity, err)
-		} else {
-			entity = formatted
-		}
-
-		localFile, err = windows.FormatLocalFilePath(localFile, entity)
-		if err != nil {
-			log.Warnf("failed to format local file path: %s", err)
-		}
+	outputTokens := aiTokens.CurrentOutput - aiTokens.LastOutput
+	if outputTokens < 0 {
+		outputTokens = 0
 	}
 
 	return Heartbeat{
-		Category:          category,
-		CursorPosition:    cursorPosition,
-		Entity:            entity,
-		EntityType:        entityType,
-		IsWrite:           isWrite,
-		Language:          language,
-		LanguageAlternate: languageAlternate,
-		LineNumber:        lineNumber,
-		LocalFile:         localFile,
-		ProjectAlternate:  projectAlternate,
-		ProjectOverride:   projectOverride,
-		Time:              time,
-		UserAgent:         userAgent,
+		AILineChanges:        aiLineChanges,
+		AISession:            aiSession,
+		AIInputTokens:        inputTokens,
+		AIOutputTokens:       outputTokens,
+		BranchAlternate:      branchAlternate,
+		Category:             category,
+		CursorPosition:       cursorPosition,
+		Entity:               entity,
+		EntityType:           entityType,
+		HumanLineChanges:     humanLineChanges,
+		IsUnsavedEntity:      isUnsavedEntity,
+		IsWrite:              isWrite,
+		Language:             language,
+		LanguageAlternate:    languageAlternate,
+		LineNumber:           lineNumber,
+		Lines:                lines,
+		LocalFile:            localFile,
+		ProjectAlternate:     projectAlternate,
+		ProjectFromGitRemote: projectFromGitRemote,
+		ProjectOverride:      projectOverride,
+		ProjectPathOverride:  projectPathOverride,
+		Time:                 time,
+		UserAgent:            userAgent,
 	}
 }
 
 // ID returns an ID generated from the heartbeat data.
 func (h Heartbeat) ID() string {
-	var branch string
+	branch := "unset"
 	if h.Branch != nil {
 		branch = *h.Branch
 	}
 
-	var project string
+	project := "unset"
 	if h.Project != nil {
 		project = *h.Project
 	}
@@ -116,10 +192,21 @@ func (h Heartbeat) ID() string {
 		isWrite = *h.IsWrite
 	}
 
-	return fmt.Sprintf("%f-%s-%s-%s-%s-%s-%t",
+	cursorPos := "nil"
+	if h.CursorPosition != nil {
+		cursorPos = fmt.Sprint(*h.CursorPosition)
+	}
+
+	category := "undefined"
+	if h.Category != "" {
+		category = h.Category
+	}
+
+	return fmt.Sprintf("%f-%s-%s-%s-%s-%s-%s-%t",
 		h.Time,
+		cursorPos,
 		h.EntityType,
-		h.Category,
+		category,
 		project,
 		branch,
 		h.Entity,
@@ -127,20 +214,37 @@ func (h Heartbeat) ID() string {
 	)
 }
 
+// IsRemote returns true when entity is a remote file.
+func (h Heartbeat) IsRemote() bool {
+	if h.EntityType != FileType {
+		return false
+	}
+
+	if h.IsUnsavedEntity {
+		return false
+	}
+
+	return remoteAddressRegex.MatchString(h.Entity)
+}
+
 // Result represents a response from the wakatime api.
 type Result struct {
-	Errors    []string
-	Status    int
+	Errors []string
+	Status int
+	ID     string
+	// Heartbeat is the original heartbeat that was sent.
 	Heartbeat Heartbeat
+	// it's a temporary solution before we have a better way to handle (avoid import cycle)
+	FileExpert any
 }
 
 // Sender sends heartbeats to the wakatime api.
 type Sender interface {
-	SendHeartbeats(hh []Heartbeat) ([]Result, error)
+	SendHeartbeats(context.Context, []Heartbeat) ([]Result, error)
 }
 
 // Handle does processing of heartbeats.
-type Handle func(hh []Heartbeat) ([]Result, error)
+type Handle func(context.Context, []Heartbeat) ([]Result, error)
 
 // HandleOption is a function, which allows chaining multiple Handles.
 type HandleOption func(next Handle) Handle
@@ -148,58 +252,94 @@ type HandleOption func(next Handle) Handle
 // NewHandle creates a new Handle, which acts like a processing pipeline,
 // with a sender eventually sending the heartbeats.
 func NewHandle(sender Sender, opts ...HandleOption) Handle {
-	return func(hh []Heartbeat) ([]Result, error) {
-		var h Handle = sender.SendHeartbeats
+	return func(ctx context.Context, hh []Heartbeat) ([]Result, error) {
+		var handle Handle = sender.SendHeartbeats
 		for i := len(opts) - 1; i >= 0; i-- {
-			h = opts[i](h)
+			handle = opts[i](handle)
 		}
 
-		return h(hh)
+		return handle(ctx, hh)
 	}
-}
-
-// UserAgentUnknownPlugin generates a user agent from various system infos, including
-// a default value for plugin.
-func UserAgentUnknownPlugin() string {
-	return UserAgent("Unknown/0")
 }
 
 // UserAgent generates a user agent from various system infos, including a
 // a passed in value for plugin.
-func UserAgent(plugin string) string {
-	info := goInfo.GetInfo()
+func UserAgent(ctx context.Context, plugin string) (userAgent string) {
+	logger := log.Extract(ctx)
+	template := "wakatime/%s (%s-%s-%s) %s %s"
 
-	return fmt.Sprintf(
-		"wakatime/%s (%s-%s-%s) %s %s",
+	defer func() {
+		if r := recover(); r != nil {
+			userAgent = fmt.Sprintf(
+				template,
+				version.Version,
+				strings.TrimSpace(system.OSName(ctx)),
+				"unknown",
+				"unknown",
+				strings.TrimSpace(runtime.Version()),
+				strings.TrimSpace(plugin),
+			)
+		}
+	}()
+
+	if plugin == "" {
+		plugin = "Unknown/0"
+	}
+
+	plugin = normalizePluginVersions(plugin)
+
+	info, err := goInfo.GetInfo()
+	if err != nil {
+		logger.Debugf("goInfo.GetInfo error: %s", err)
+	}
+
+	userAgent = fmt.Sprintf(
+		template,
 		version.Version,
-		runtime.GOOS,
-		info.Core,
-		info.Platform,
-		runtime.Version(),
-		plugin,
+		strings.TrimSpace(system.OSName(ctx)),
+		strings.TrimSpace(info.Core),
+		strings.TrimSpace(info.Platform),
+		strings.TrimSpace(runtime.Version()),
+		strings.TrimSpace(plugin),
 	)
+
+	return userAgent
 }
 
-// PluginFromUserAgent parses the plugin name from a wakatime user agent.
-func PluginFromUserAgent(userAgent string) string {
-	splitted := strings.Split(userAgent, " ")
-	splitted = strings.Split(splitted[len(splitted)-1], "/")
-	splitted = strings.Split(splitted[0], "-")
+// normalizePluginVersions replaces empty product versions with "unknown".
+// Product tokens in user agents are space-separated, so `Claude/` becomes
+// `Claude/unknown` while already-populated tokens are left unchanged.
+func normalizePluginVersions(plugin string) string {
+	fields := strings.Fields(plugin)
+	changed := false
 
-	return splitted[0]
+	for i, field := range fields {
+		if strings.HasSuffix(field, "/") {
+			fields[i] = field + "unknown"
+			changed = true
+		}
+	}
+
+	if !changed {
+		return strings.TrimSpace(plugin)
+	}
+
+	return strings.Join(fields, " ")
 }
 
-// Bool returns a pointer to the bool value passed in.
-func Bool(v bool) *bool {
+// PointerTo returns a pointer to the value passed in.
+func PointerTo[t bool | int | string](v t) *t {
 	return &v
 }
 
-// Int returns a pointer to the int value passed in.
-func Int(v int) *int {
-	return &v
-}
+func isDir(ctx context.Context, filepath string) bool {
+	logger := log.Extract(ctx)
 
-// String returns a pointer to the string value passed in.
-func String(v string) *string {
-	return &v
+	info, err := os.Stat(filepath)
+	if err != nil {
+		logger.Warnf("failed to stat filepath %q: %s", filepath, err)
+		return false
+	}
+
+	return info.IsDir()
 }

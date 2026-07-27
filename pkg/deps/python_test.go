@@ -12,7 +12,7 @@ import (
 func TestParserPython_Parse(t *testing.T) {
 	parser := deps.ParserPython{}
 
-	dependencies, err := parser.Parse("testdata/python.py")
+	dependencies, err := parser.Parse(t.Context(), "testdata/python.py")
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{

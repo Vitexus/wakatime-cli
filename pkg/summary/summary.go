@@ -1,57 +1,240 @@
 package summary
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
-	"time"
+
+	"github.com/wakatime/wakatime-cli/pkg/output"
 )
 
-// Category represents tracked working time of a specific category.
-type Category struct {
-	Category string
-	Total    string
-}
-
-// Summary represents the tracked working time for a single day.
-type Summary struct {
-	Date       time.Time
-	Total      string
-	ByCategory []Category
-}
-
-// RenderToday generates a text representation from summaries of the current day.
-// Expects exactly one summary for the current day. Will return an error otherwise.
-func RenderToday(summaries []Summary) (string, error) {
-	var (
-		now   = time.Now()
-		today []Summary
-	)
-
-	for _, s := range summaries {
-		if now.Year() != s.Date.Year() || now.Month() != s.Date.Month() || now.Day() != s.Date.Day() {
-			continue
-		}
-
-		if len(today) > 0 {
-			return "", fmt.Errorf("received two summaries for the current day. 1. %+v, 2. %+v", today[0], s)
-		}
-
-		today = append(today, s)
+type (
+	// Category represents the tracked category for a single day activity.
+	Category struct {
+		Decimal      string  `json:"decimal"`
+		Digital      string  `json:"digital"`
+		Hours        int     `json:"hours"`
+		Minutes      int     `json:"minutes"`
+		Name         string  `json:"name"`
+		Percent      float64 `json:"percent"`
+		Seconds      int     `json:"seconds"`
+		Text         string  `json:"text"`
+		TotalSeconds float64 `json:"total_seconds"`
 	}
 
-	if len(today) == 0 {
+	// Counter represents the time counters.
+	Counter struct {
+		Decimal      string  `json:"decimal"`
+		Digital      string  `json:"digital"`
+		Hours        int     `json:"hours"`
+		Minutes      int     `json:"minutes"`
+		Name         string  `json:"name"`
+		Percent      float64 `json:"percent"`
+		Seconds      int     `json:"seconds"`
+		Text         string  `json:"text"`
+		TotalSeconds float64 `json:"total_seconds"`
+	}
+
+	// Data aggregates all activities for a single day.
+	Data struct {
+		Categories       []Category        `json:"categories"`
+		Dependencies     []Dependency      `json:"dependencies"`
+		Editors          []Editor          `json:"editors"`
+		GrandTotal       GrandTotal        `json:"grand_total"`
+		Languages        []Language        `json:"languages"`
+		Machines         []Machine         `json:"machines"`
+		OperatingSystems []OperatingSystem `json:"operating_systems"`
+		Projects         []Project         `json:"projects"`
+		Range            Range             `json:"range"`
+	}
+
+	// Dependency represents the discovered dependency for a single day activity.
+	Dependency struct {
+		Decimal      string  `json:"decimal"`
+		Digital      string  `json:"digital"`
+		Hours        int     `json:"hours"`
+		Minutes      int     `json:"minutes"`
+		Name         string  `json:"name"`
+		Percent      float64 `json:"percent"`
+		Seconds      int     `json:"seconds"`
+		Text         string  `json:"text"`
+		TotalSeconds float64 `json:"total_seconds"`
+	}
+
+	// Editor represents the used editor for a single day activity.
+	Editor struct {
+		Decimal      string  `json:"decimal"`
+		Digital      string  `json:"digital"`
+		Hours        int     `json:"hours"`
+		Minutes      int     `json:"minutes"`
+		Name         string  `json:"name"`
+		Percent      float64 `json:"percent"`
+		Seconds      int     `json:"seconds"`
+		Text         string  `json:"text"`
+		TotalSeconds float64 `json:"total_seconds"`
+	}
+
+	// GrandTotal represents the total working time for a single day.
+	GrandTotal struct {
+		Decimal      string  `json:"decimal"`
+		Digital      string  `json:"digital"`
+		Hours        int     `json:"hours"`
+		Minutes      int     `json:"minutes"`
+		Text         string  `json:"text"`
+		TotalSeconds float64 `json:"total_seconds"`
+	}
+
+	// Language represents the used programming language for a single day activity.
+	Language struct {
+		Decimal      string  `json:"decimal"`
+		Digital      string  `json:"digital"`
+		Hours        int     `json:"hours"`
+		Minutes      int     `json:"minutes"`
+		Name         string  `json:"name"`
+		Percent      float64 `json:"percent"`
+		Seconds      int     `json:"seconds"`
+		Text         string  `json:"text"`
+		TotalSeconds float64 `json:"total_seconds"`
+	}
+
+	// Machine represents the used machine for a single day activity.
+	Machine struct {
+		Decimal       string  `json:"decimal"`
+		Digital       string  `json:"digital"`
+		Hours         int     `json:"hours"`
+		MachineNameID string  `json:"machine_name_id"`
+		Minutes       int     `json:"minutes"`
+		Name          string  `json:"name"`
+		Percent       float64 `json:"percent"`
+		Seconds       int     `json:"seconds"`
+		Text          string  `json:"text"`
+		TotalSeconds  float64 `json:"total_seconds"`
+	}
+
+	// OperatingSystem represents the used operating system for a single day activity.
+	OperatingSystem struct {
+		Decimal      string  `json:"decimal"`
+		Digital      string  `json:"digital"`
+		Hours        int     `json:"hours"`
+		Minutes      int     `json:"minutes"`
+		Name         string  `json:"name"`
+		Percent      float64 `json:"percent"`
+		Seconds      int     `json:"seconds"`
+		Text         string  `json:"text"`
+		TotalSeconds float64 `json:"total_seconds"`
+	}
+
+	// Project represents the discovered project for a single day activity.
+	Project struct {
+		Decimal      string  `json:"decimal"`
+		Digital      string  `json:"digital"`
+		Hours        int     `json:"hours"`
+		Minutes      int     `json:"minutes"`
+		Name         string  `json:"name"`
+		Percent      float64 `json:"percent"`
+		Seconds      int     `json:"seconds"`
+		Text         string  `json:"text"`
+		TotalSeconds float64 `json:"total_seconds"`
+	}
+
+	// Range represents the time range of a summary.
+	Range struct {
+		Date     string `json:"date"`
+		End      string `json:"end"`
+		Start    string `json:"start"`
+		Text     string `json:"text"`
+		Timezone string `json:"timezone"`
+	}
+
+	// Summary represents the tracked working time for a single day.
+	Summary struct {
+		CachedAt        string `json:"cached_at"`
+		Data            Data   `json:"data"`
+		HasTeamFeatures bool   `json:"has_team_features"`
+	}
+)
+
+// RenderToday generates a text representation from summary of the current day.
+// If out is set to output.RawJSONOutput or output.JSONOutput, the summary will be marshaled to JSON.
+// Expects exactly one summary for the current day. Will return an error otherwise.
+func RenderToday(
+	summary *Summary,
+	hideCategories bool,
+	hideMinutes bool,
+	maxCategories int,
+	out output.Output,
+) (string, error) {
+	if summary == nil {
 		return "", errors.New("no summary found for the current day")
 	}
 
-	if len(today[0].ByCategory) < 2 {
-		return string(today[0].Total), nil
+	if out == output.RawJSONOutput {
+		data, err := json.Marshal(summary)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal json summary: %s", err)
+		}
+
+		return string(data), nil
+	}
+
+	if out == output.JSONOutput {
+		type simplified struct {
+			Text            string `json:"text"`
+			HasTeamFeatures bool   `json:"has_team_features"`
+		}
+
+		s := simplified{
+			Text:            getText(summary, hideCategories, hideMinutes, maxCategories),
+			HasTeamFeatures: summary.HasTeamFeatures,
+		}
+
+		data, err := json.Marshal(s)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal json simplified summary: %s", err)
+		}
+
+		return string(data), nil
+	}
+
+	return getText(summary, hideCategories, hideMinutes, maxCategories), nil
+}
+
+func getText(summary *Summary, hideCategories bool, hideMinutes bool, maxCategories int) string {
+	if len(summary.Data.Categories) < 2 || hideCategories {
+		return durationText(summary.Data.GrandTotal.Hours, summary.Data.GrandTotal.Text, hideMinutes)
 	}
 
 	var outputs []string
-	for _, category := range today[0].ByCategory {
-		outputs = append(outputs, fmt.Sprintf("%s %s", category.Total, category.Category))
+
+	categories := summary.Data.Categories
+
+	if maxCategories > 0 && len(categories) > maxCategories {
+		categories = categories[:maxCategories]
 	}
 
-	return strings.Join(outputs, ", "), nil
+	for _, category := range categories {
+		text := durationText(category.Hours, category.Text, hideMinutes)
+		outputs = append(outputs, fmt.Sprintf("%s %s", text, category.Name))
+	}
+
+	result := strings.Join(outputs, ", ")
+
+	if maxCategories > 1 && len(summary.Data.Categories) > maxCategories {
+		result += "..."
+	}
+
+	return result
+}
+
+func durationText(hours int, text string, hideMinutes bool) string {
+	if !hideMinutes || hours == 0 {
+		return text
+	}
+
+	if hours == 1 {
+		return "1 hr"
+	}
+
+	return fmt.Sprintf("%d hrs", hours)
 }

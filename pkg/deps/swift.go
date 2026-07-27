@@ -1,17 +1,18 @@
 package deps
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"regexp"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/lexers/s"
+	"github.com/wakatime/wakatime-cli/pkg/file"
+	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 )
 
-// nolint:noglobals
 var swiftExcludeRegex = regexp.MustCompile(`(?i)^foundation$`)
 
 // StateSwift is a token parsing state.
@@ -32,23 +33,21 @@ type ParserSwift struct {
 }
 
 // Parse parses dependencies from Swift file content using the chroma Swift lexer.
-func (p *ParserSwift) Parse(filepath string) ([]string, error) {
-	reader, err := os.Open(filepath)
+func (p *ParserSwift) Parse(ctx context.Context, filepath string) ([]string, error) {
+	head, err := file.ReadHead(ctx, filepath, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %s", filepath, err)
+		return nil, fmt.Errorf("failed to read: %s", err)
 	}
-
-	defer reader.Close()
 
 	p.init()
 	defer p.init()
 
-	data, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read from reader: %s", err)
+	l := lexers.Get(heartbeat.LanguageSwift.String())
+	if l == nil {
+		return nil, fmt.Errorf("failed to get lexer for %s", heartbeat.LanguageSwift.String())
 	}
 
-	iter, err := s.Swift.Tokenise(nil, string(data))
+	iter, err := l.Tokenise(nil, string(head))
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize file content: %s", err)
 	}
@@ -94,7 +93,7 @@ func (p *ParserSwift) processKeywordDeclaration(value string) {
 }
 
 func (p *ParserSwift) processNameClass(value string) {
-	switch p.State {
+	switch p.State { // nolint:exhaustive
 	case StateSwiftImport:
 		p.append(value)
 	default:

@@ -1,0 +1,62 @@
+package offline_test
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/wakatime/wakatime-cli/pkg/offline"
+
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestQueueFilepathLegacy(t *testing.T) {
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	ctx := t.Context()
+
+	tests := map[string]struct {
+		ViperValue string
+		EnvVar     string
+		Expected   string
+	}{
+		"default": {
+			Expected: filepath.Join(home, ".wakatime.bdb"),
+		},
+		"env_trailing_slash": {
+			EnvVar:   "~/path2/",
+			Expected: filepath.Join(home, "path2", ".wakatime.bdb"),
+		},
+		"env_without_trailing_slash": {
+			EnvVar:   "~/path2",
+			Expected: filepath.Join(home, "path2", ".wakatime.bdb"),
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("WAKATIME_HOME", test.EnvVar)
+
+			v := viper.New()
+			queueFilepath, err := offline.QueueFilepathLegacy(ctx, v)
+			require.NoError(t, err)
+
+			assert.Equal(t, test.Expected, queueFilepath)
+		})
+	}
+}
+
+func TestQueueFilepathLegacy_ConfiguredFile(t *testing.T) {
+	expected := filepath.Join(t.TempDir(), "legacy.bdb")
+
+	v := viper.New()
+	v.Set("offline-queue-file-legacy", expected)
+
+	queueFilepath, err := offline.QueueFilepathLegacy(t.Context(), v)
+	require.NoError(t, err)
+
+	assert.Equal(t, expected, queueFilepath)
+}

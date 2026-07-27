@@ -1,13 +1,15 @@
 package deps
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/lexers/h"
+	"github.com/wakatime/wakatime-cli/pkg/file"
+	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 )
 
 // StateHaskell is a token parsing state.
@@ -28,23 +30,21 @@ type ParserHaskell struct {
 }
 
 // Parse parses dependencies from Haskell file content using the chroma Haskell lexer.
-func (p *ParserHaskell) Parse(filepath string) ([]string, error) {
-	reader, err := os.Open(filepath)
+func (p *ParserHaskell) Parse(ctx context.Context, filepath string) ([]string, error) {
+	head, err := file.ReadHead(ctx, filepath, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %s", filepath, err)
+		return nil, fmt.Errorf("failed to read: %s", err)
 	}
-
-	defer reader.Close()
 
 	p.init()
 	defer p.init()
 
-	data, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read from reader: %s", err)
+	l := lexers.Get(heartbeat.LanguageHaskell.String())
+	if l == nil {
+		return nil, fmt.Errorf("failed to get lexer for %s", heartbeat.LanguageHaskell.String())
 	}
 
-	iter, err := h.Haskell.Tokenise(nil, string(data))
+	iter, err := l.Tokenise(nil, string(head))
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize file content: %s", err)
 	}

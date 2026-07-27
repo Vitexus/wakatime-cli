@@ -40,13 +40,13 @@ func TestClient_Goal(t *testing.T) {
 		})
 
 	c := api.NewClient(u)
-	goal, err := c.Goal("00000000-0000-4000-8000-000000000000")
+	goal, err := c.Goal(t.Context(), "00000000-0000-4000-8000-000000000000")
 
 	require.NoError(t, err)
 
-	assert.Equal(t, "3 hrs 23 mins", goal.Total)
+	assert.Equal(t, "3 hrs 23 mins", goal.Data.ChartData[len(goal.Data.ChartData)-1].ActualSecondsText)
 
-	assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+	assert.Equal(t, 1, numCalls)
 }
 
 func TestClient_GoalWithTimeout(t *testing.T) {
@@ -59,20 +59,24 @@ func TestClient_GoalWithTimeout(t *testing.T) {
 	defer close(called)
 
 	router.HandleFunc(
-		"/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, req *http.Request) {
+		"/users/current/goals/00000000-0000-4000-8000-000000000000", func(_ http.ResponseWriter, _ *http.Request) {
 			<-block
+
 			called <- struct{}{}
 		})
 
 	opts := []api.Option{api.WithTimeout(20 * time.Millisecond)}
+
 	c := api.NewClient(u, opts...)
-	_, err := c.Goal("00000000-0000-4000-8000-000000000000")
+
+	_, err := c.Goal(t.Context(), "00000000-0000-4000-8000-000000000000")
 	require.Error(t, err)
 
 	errMsg := fmt.Sprintf("error %q does not contain string 'Timeout'", err)
 	assert.True(t, strings.Contains(err.Error(), "Timeout"), errMsg)
 
 	close(block)
+
 	select {
 	case <-called:
 		break
@@ -88,18 +92,20 @@ func TestClient_Goal_Err(t *testing.T) {
 	var numCalls int
 
 	router.HandleFunc(
-		"/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, req *http.Request) {
+		"/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, _ *http.Request) {
 			numCalls++
+
 			w.WriteHeader(http.StatusInternalServerError)
 		})
 
 	c := api.NewClient(u)
-	_, err := c.Goal("00000000-0000-4000-8000-000000000000")
+
+	_, err := c.Goal(t.Context(), "00000000-0000-4000-8000-000000000000")
 
 	var apierr api.Err
 
 	assert.True(t, errors.As(err, &apierr))
-	assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+	assert.Equal(t, 1, numCalls)
 }
 
 func TestClient_Goal_ErrAuth(t *testing.T) {
@@ -109,25 +115,52 @@ func TestClient_Goal_ErrAuth(t *testing.T) {
 	var numCalls int
 
 	router.HandleFunc(
-		"/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, req *http.Request) {
+		"/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, _ *http.Request) {
 			numCalls++
+
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 
 	c := api.NewClient(u)
-	_, err := c.Goal("00000000-0000-4000-8000-000000000000")
 
-	var autherr api.ErrAuth
+	_, err := c.Goal(t.Context(), "00000000-0000-4000-8000-000000000000")
 
-	assert.True(t, errors.As(err, &autherr))
-	assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+	var errauth api.ErrAuth
+
+	assert.ErrorAs(t, err, &errauth)
+
+	assert.Equal(t, 1, numCalls)
 }
 
-func TestClient_Goal_ErrRequest(t *testing.T) {
+func TestClient_Goal_ErrBadRequest(t *testing.T) {
+	u, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var numCalls int
+
+	router.HandleFunc(
+		"/users/current/goals/00000000-0000-4000-8000-000000000000", func(w http.ResponseWriter, _ *http.Request) {
+			numCalls++
+
+			w.WriteHeader(http.StatusBadRequest)
+		})
+
+	c := api.NewClient(u)
+
+	_, err := c.Goal(t.Context(), "00000000-0000-4000-8000-000000000000")
+
+	var errbadRequest api.ErrBadRequest
+
+	assert.True(t, errors.As(err, &errbadRequest))
+	assert.Equal(t, 1, numCalls)
+}
+
+func TestClient_Goal_ErrInvalidUrl(t *testing.T) {
 	c := api.NewClient("invalid-url")
-	_, err := c.Goal("00000000-0000-4000-8000-000000000000")
 
-	var reqerr api.ErrRequest
+	_, err := c.Goal(t.Context(), "00000000-0000-4000-8000-000000000000")
 
-	assert.True(t, errors.As(err, &reqerr))
+	var apierr api.Err
+
+	assert.True(t, errors.As(err, &apierr))
 }

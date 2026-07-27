@@ -14,6 +14,8 @@ func typeTests() map[string]heartbeat.EntityType {
 	return map[string]heartbeat.EntityType{
 		"file":   heartbeat.FileType,
 		"domain": heartbeat.DomainType,
+		"url":    heartbeat.URLType,
+		"event":  heartbeat.EventType,
 		"app":    heartbeat.AppType,
 	}
 }
@@ -38,6 +40,7 @@ func TestEntityType_UnmarshalJSON(t *testing.T) {
 	for value, entityType := range typeTests() {
 		t.Run(value, func(t *testing.T) {
 			var et heartbeat.EntityType
+
 			require.NoError(t, json.Unmarshal([]byte(`"`+value+`"`), &et))
 
 			assert.Equal(t, entityType, et)

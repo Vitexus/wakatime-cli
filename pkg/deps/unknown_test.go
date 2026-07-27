@@ -9,7 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParserUnkwown_Parse(t *testing.T) {
+func TestParserUnknown_Parse(t *testing.T) {
+	ctx := t.Context()
+
 	tests := map[string]struct {
 		Filepath string
 		Expected []string
@@ -32,7 +34,7 @@ func TestParserUnkwown_Parse(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			parser := deps.ParserUnknown{}
 
-			dependencies, err := parser.Parse(test.Filepath)
+			dependencies, err := parser.Parse(ctx, test.Filepath)
 			require.NoError(t, err)
 
 			assert.Equal(t, test.Expected, dependencies)

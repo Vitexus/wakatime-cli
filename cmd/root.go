@@ -1,34 +1,47 @@
 package cmd
 
 import (
-	"strconv"
+	"errors"
+	"fmt"
+	"log"
+	"os"
 
-	"github.com/wakatime/wakatime-cli/cmd/legacy"
+	"github.com/wakatime/wakatime-cli/pkg/api"
+	"github.com/wakatime/wakatime-cli/pkg/exitcode"
 	"github.com/wakatime/wakatime-cli/pkg/offline"
+	"github.com/wakatime/wakatime-cli/pkg/vipertools"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gopkg.in/ini.v1"
 )
 
-const (
-	// defaultConfigSection is the default section in the wakatime ini config file.
-	defaultConfigSection = "settings"
-	// defaultTimeoutSecs is the default timeout used for requests to the wakatime api.
-	defaultTimeoutSecs = 60
-)
+// defaultConfigSection is the default section in the wakatime ini config file.
+const defaultConfigSection = "settings"
 
 // NewRootCMD creates a rootCmd, which represents the base command when called without any subcommands.
 func NewRootCMD() *cobra.Command {
-	multilineOption := viper.IniLoadOptions(ini.LoadOptions{AllowPythonMultilineValues: true})
-	v := viper.NewWithOptions(multilineOption)
+	v, err := vipertools.New()
+	if err != nil {
+		log.Fatalf("failed to create viper instance: %s", err)
+	}
 
 	cmd := &cobra.Command{
 		Use:   "wakatime-cli",
 		Short: "Command line interface used by all WakaTime text editor plugins.",
-		Run: func(cmd *cobra.Command, args []string) {
-			legacy.Run(cmd, v)
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := RunE(cmd, v); err != nil {
+				var errexitcode exitcode.Err
+
+				if errors.As(err, &errexitcode) {
+					os.Exit(errexitcode.Code)
+				}
+
+				os.Exit(exitcode.ErrGeneric)
+			}
+
+			os.Exit(exitcode.Success)
+
+			return nil
 		},
 	}
 
@@ -39,6 +52,9 @@ func NewRootCMD() *cobra.Command {
 
 func setFlags(cmd *cobra.Command, v *viper.Viper) {
 	flags := cmd.Flags()
+	flags.Int("ai-line-changes", 0, "Optional number of lines added or removed by AI since "+
+		" last heartbeat in the current file.")
+	flags.String("alternate-branch", "", "Optional alternate branch name. Auto-detected branch takes priority.")
 	flags.String("alternate-language", "", "Optional alternate language name. Auto-detected language takes priority.")
 	flags.String("alternate-project", "", "Optional alternate project name. Auto-detected project takes priority.")
 	flags.String(
@@ -55,12 +71,15 @@ func setFlags(cmd *cobra.Command, v *viper.Viper) {
 	flags.String(
 		"category",
 		"",
-		"Category of this heartbeat activity. Can be \"coding\","+
-			" \"building\", \"indexing\", \"debugging\", \"running tests\","+
-			" \"writing tests\", \"manual testing\", \"code reviewing\","+
-			" \"browsing\", or \"designing\". Defaults to \"coding\".",
+		"Category of this heartbeat activity. Can be \"coding\", \"ai coding\","+
+			" \"building\", \"indexing\", \"debugging\", \"learning\", \"notes\","+
+			" \"meeting\", \"planning\", \"researching\", \"communicating\", \"supporting\","+
+			" \"advising\", \"running tests\", \"writing tests\", \"manual testing\","+
+			" \"writing docs\", \"code reviewing\", \"browsing\","+
+			" \"translating\", or \"designing\". Defaults to \"coding\".",
 	)
 	flags.String("config", "", "Optional config file. Defaults to '~/.wakatime.cfg'.")
+	flags.String("internal-config", "", "Optional internal config file. Defaults to '~/.wakatime/wakatime-internal.cfg'.")
 	flags.String("config-read", "", "Prints value for the given config key, then exits.")
 	flags.String(
 		"config-section",
@@ -83,7 +102,7 @@ func setFlags(cmd *cobra.Command, v *viper.Viper) {
 	flags.String(
 		"entity-type",
 		"",
-		"Entity type for this heartbeat. Can be \"file\", \"domain\" or \"app\". Defaults to \"file\".",
+		"Entity type for this heartbeat. Can be \"file\", \"domain\", \"url\", or \"app\". Defaults to \"file\".",
 	)
 	flags.StringSlice(
 		"exclude",
@@ -102,10 +121,28 @@ func setFlags(cmd *cobra.Command, v *viper.Viper) {
 		"",
 		"(deprecated) Absolute path to file for the heartbeat."+
 			" Can also be a url, domain or app when --entity-type is not file.")
+	flags.Bool("file-experts", false, "Prints the top developer within a team for the given entity, then exits.")
+	flags.Bool(
+		"guess-language",
+		false,
+		"Enable detecting language from file contents.")
+	flags.Int(
+		"heartbeat-rate-limit-seconds",
+		offline.RateLimitDefaultSeconds,
+		fmt.Sprintf("Only sync heartbeats to the API once per these seconds, instead"+
+			" saving to the offline db. Defaults to %d. Use zero to disable.",
+			offline.RateLimitDefaultSeconds),
+	)
 	flags.String("hide-branch-names", "", "Obfuscate branch names. Will not send revision control branch names to api.")
 	flags.String("hide-file-names", "", "Obfuscate filenames. Will not send file names to api.")
 	flags.String("hide-filenames", "", "(deprecated) Obfuscate filenames. Will not send file names to api.")
 	flags.String("hidefilenames", "", "(deprecated) Obfuscate filenames. Will not send file names to api.")
+	flags.Bool(
+		"hide-project-folder",
+		false,
+		"When set, send the file's path relative to the project folder."+
+			" For ex: /User/me/projects/bar/src/file.ts is sent as src/file.ts so the server never sees the full path."+
+			" When the project folder cannot be detected, only the file name is sent. For ex: file.ts.")
 	flags.String(
 		"hide-project-names",
 		"",
@@ -114,6 +151,8 @@ func setFlags(cmd *cobra.Command, v *viper.Viper) {
 			" created with a random project name.",
 	)
 	flags.String("hostname", "", "Optional name of local machine. Defaults to local machine name read from system.")
+	flags.Int("human-line-changes", 0, "Optional number of lines added or removed by humans since"+
+		" last heartbeat in the current file.")
 	flags.StringSlice(
 		"include",
 		nil,
@@ -126,6 +165,12 @@ func setFlags(cmd *cobra.Command, v *viper.Viper) {
 		false,
 		"Disables tracking folders unless they contain a .wakatime-project file. Defaults to false.",
 	)
+	flags.Bool(
+		"is-unsaved-entity",
+		false,
+		"Normally files that don't exist on disk are skipped and not tracked. When this option is present,"+
+			" the main heartbeat file will be tracked even if it doesn't exist. To set this flag on"+
+			" extra heartbeats, use the 'is_unsaved_entity' json key.")
 	flags.String("key", "", "Your wakatime api key; uses api_key from ~/.wakatime.cfg by default.")
 	flags.String("language", "", "Optional language name. If valid, takes priority over auto-detected language.")
 	flags.Int("lineno", 0, "Optional line number. This is the current line being edited.")
@@ -141,9 +186,14 @@ func setFlags(cmd *cobra.Command, v *viper.Viper) {
 			" remote file, this local file will be used for stats and just"+
 			" the value of --entity is sent with the heartbeat.",
 	)
-	flags.String("log-file", "", "Optional log file. Defaults to '~/.wakatime.log'.")
-	flags.String("logfile", "", "(deprecated) Optional log file. Defaults to '~/.wakatime.log'.")
+	flags.String("log-file", "", "Optional log file. Defaults to '~/.wakatime/wakatime.log'.")
+	flags.String("logfile", "", "(deprecated) Optional log file. Defaults to '~/.wakatime/wakatime.log'.")
 	flags.Bool("log-to-stdout", false, "If enabled, logs will go to stdout. Will overwrite logfile configs.")
+	flags.Bool(
+		"metrics",
+		false,
+		"When set, collects metrics usage in '~/.wakatime/metrics' folder. Defaults to false.",
+	)
 	flags.Bool(
 		"no-ssl-verify",
 		false,
@@ -153,11 +203,27 @@ func setFlags(cmd *cobra.Command, v *viper.Viper) {
 	flags.String(
 		"offline-queue-file",
 		"",
-		"(internal) Specify a offline queue file, which will be used instead of the default one.",
+		"(internal) Specify an offline queue file, which will be used instead of the default one.",
+	)
+	flags.String(
+		"offline-queue-file-legacy",
+		"",
+		"(internal) Specify the legacy offline queue file, which will be used instead of the default one.",
+	)
+	flags.String(
+		"output",
+		"",
+		"Format output. Can be \"text\", \"json\" or \"raw-json\". Defaults to \"text\".",
 	)
 	flags.String("plugin", "", "Optional text editor plugin name and version for User-Agent header.")
+	flags.Int("print-offline-heartbeats", offline.PrintMaxDefault, "Prints offline heartbeats to stdout.")
 	flags.String("project", "", "Override auto-detected project."+
 		" Use --alternate-project to supply a fallback project if one can't be auto-detected.")
+	flags.String(
+		"project-folder",
+		"",
+		"Optional workspace path. Usually used when hiding the project folder, or when a project"+
+			" root folder can't be auto detected.")
 	flags.String(
 		"proxy",
 		"",
@@ -165,41 +231,68 @@ func setFlags(cmd *cobra.Command, v *viper.Viper) {
 			" For example: 'https://user:pass@host:port' or 'socks5://user:pass@host:port'"+
 			" or 'domain\\user:pass'",
 	)
+	flags.Bool(
+		"send-diagnostics-on-errors",
+		false,
+		"When --verbose or debug enabled, also sends diagnostics on any error not just crashes.",
+	)
 	flags.String(
 		"ssl-certs-file",
 		"",
 		"Override the bundled CA certs file. By default, uses"+
 			" system ca certs.",
 	)
-	flags.String(
+	flags.Float64("sync-ai-after", 0, "(deprecated) Parse AI transcript logs for Claude, Codex, Copilot, "+
+		"Cursor, etc. after a floating-point unix epoch timestamp. Sends any AI heartbeats"+
+		"along with normal heartbeats, changing the category of normal heartbeats to "+
+		"'AI Coding' before sending.")
+	flags.Bool(
+		"sync-ai-activity",
+		false,
+		"Parse AI transcript logs for Claude, Codex, Cursor, etc. and send any resulting AI heartbeats"+
+			" without requiring --entity.",
+	)
+	flags.Bool(
+		"sync-ai-heartbeats",
+		false,
+		"Alias for --sync-ai-activity.",
+	)
+	flags.Bool("sync-ai-disabled", false, "Disable parsing AI transcript logs when sending heartbeats. "+
+		"By default, AI transcript logs are parsed every time when sending heartbeats.")
+	flags.Bool("sync-ai-disable", false, "")
+	flags.Int(
 		"sync-offline-activity",
-		strconv.Itoa(offline.SyncMaxDefault),
-		"Amount of offline activity to sync from your local ~/.wakatime.bdb bolt"+
-			" file to your WakaTime Dashboard before exiting. Can be \"none\" or"+
-			" a positive integer. Defaults to 1000, meaning after sending a heartbeat"+
+		offline.SyncMaxDefault,
+		fmt.Sprintf("Amount of offline activity to sync from your local ~/.wakatime/offline_heartbeats.bdb bolt"+
+			" file to your WakaTime Dashboard before exiting. Can be zero or"+
+			" a positive integer. Defaults to %d, meaning after sending a heartbeat"+
 			" while online, all queued offline heartbeats are sent to WakaTime API, up"+
-			" to a limit of 1000. Can be used without --entity to only sync offline"+
-			" activity without generating new heartbeats.",
+			" to a limit of 1000. Zero syncs all offline heartbeats. Can be used"+
+			" without --entity to only sync offline activity without generating"+
+			" new heartbeats.", offline.SyncMaxDefault),
 	)
 	flags.Bool("offline-count", false, "Prints the number of heartbeats in the offline db, then exits.")
 	flags.Int(
 		"timeout",
-		defaultTimeoutSecs,
-		"Number of seconds to wait when sending heartbeats to api. Defaults to 60 seconds.",
+		api.DefaultTimeoutSecs,
+		fmt.Sprintf(
+			"Number of seconds to wait when sending heartbeats to api. Defaults to %d seconds.", api.DefaultTimeoutSecs),
 	)
 	flags.Float64("time", 0, "Optional floating-point unix epoch timestamp. Uses current time by default.")
-	flags.Bool("today", false, "Prints dashboard time for Today, then exits.")
+	flags.Bool("today", false, "Prints dashboard time for today, then exits.")
+	flags.String("today-hide-categories", "", "When optionally included with --today, causes output to"+
+		" show total code time today without categories. Defaults to false.")
 	flags.String(
 		"today-goal",
 		"",
-		"Prints time for the given goal id Today, then exits"+
+		"Prints time for the given goal id today, then exits"+
 			" Visit wakatime.com/api/v1/users/current/goals to find your goal id.")
 	flags.Bool(
-		"useragent",
+		"user-agent",
 		false,
 		"(internal) Prints the wakatime-cli useragent, as it will be sent to the api, then exits.",
 	)
-	flags.Bool("verbose", false, "Turns on debug messages in log file.")
+	flags.Bool("verbose", false, "Turns on debug messages in log file, and sends diagnostics if a crash occurs.")
 	flags.Bool("version", false, "Prints the wakatime-cli version number, then exits.")
 	flags.Bool("write", false, "When set, tells api this heartbeat was triggered from writing to a file.")
 
@@ -210,10 +303,14 @@ func setFlags(cmd *cobra.Command, v *viper.Viper) {
 	_ = flags.MarkHidden("hide-filenames")
 	_ = flags.MarkHidden("hidefilenames")
 	_ = flags.MarkHidden("logfile")
+	_ = flags.MarkHidden("sync-ai-after")
+	_ = flags.MarkHidden("sync-ai-disable")
+	_ = flags.MarkHidden("sync-ai-heartbeats")
 
 	// hide internal flags
 	_ = flags.MarkHidden("offline-queue-file")
-	_ = flags.MarkHidden("useragent")
+	_ = flags.MarkHidden("offline-queue-file-legacy")
+	_ = flags.MarkHidden("user-agent")
 
 	err := v.BindPFlags(flags)
 	if err != nil {

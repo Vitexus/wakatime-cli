@@ -1,14 +1,16 @@
 package deps
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"regexp"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/lexers/c"
+	"github.com/wakatime/wakatime-cli/pkg/file"
+	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 )
 
 var cExcludeRegex = regexp.MustCompile(`(?i)^(stdio\.h|stdlib\.h|string\.h|time\.h)$`)
@@ -23,7 +25,7 @@ const (
 	StateCImport
 )
 
-// ParserC is a dependency parser for the c programming language.
+// ParserC is a dependency parser for the C programming language.
 // It is not thread safe.
 type ParserC struct {
 	State  StateC
@@ -31,23 +33,21 @@ type ParserC struct {
 }
 
 // Parse parses dependencies from C file content using the C lexer.
-func (p *ParserC) Parse(filepath string) ([]string, error) {
-	reader, err := os.Open(filepath)
+func (p *ParserC) Parse(ctx context.Context, filepath string) ([]string, error) {
+	head, err := file.ReadHead(ctx, filepath, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %s", filepath, err)
+		return nil, fmt.Errorf("failed to read: %s", err)
 	}
-
-	defer reader.Close()
 
 	p.init()
 	defer p.init()
 
-	data, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read from reader: %s", err)
+	l := lexers.Get(heartbeat.LanguageC.String())
+	if l == nil {
+		return nil, fmt.Errorf("failed to get lexer for %s", heartbeat.LanguageC.String())
 	}
 
-	iter, err := c.C.Tokenise(nil, string(data))
+	iter, err := l.Tokenise(nil, string(head))
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize file content: %s", err)
 	}

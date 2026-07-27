@@ -12,7 +12,7 @@ import (
 func TestParserPHP_Parse(t *testing.T) {
 	parser := deps.ParserPHP{}
 
-	dependencies, err := parser.Parse("testdata/php.php")
+	dependencies, err := parser.Parse(t.Context(), "testdata/php.php")
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{

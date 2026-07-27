@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/wakatime/wakatime-cli/pkg/api"
 	"github.com/wakatime/wakatime-cli/pkg/version"
@@ -19,6 +18,8 @@ import (
 )
 
 func TestOption_WithAuth(t *testing.T) {
+	ctx := t.Context()
+
 	tests := map[string]struct {
 		User            string
 		AuthHeaderValue string
@@ -39,8 +40,9 @@ func TestOption_WithAuth(t *testing.T) {
 
 			var numCalls int
 
-			router.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+			router.HandleFunc("/", func(_ http.ResponseWriter, req *http.Request) {
 				assert.Equal(t, []string{test.AuthHeaderValue}, req.Header["Authorization"])
+
 				numCalls++
 			})
 
@@ -54,12 +56,13 @@ func TestOption_WithAuth(t *testing.T) {
 			require.NoError(t, err)
 
 			c := api.NewClient("", []api.Option{withAuth}...)
-			resp, err := c.Do(req)
+
+			resp, err := c.Do(ctx, req)
 			require.NoError(t, err)
 
 			defer resp.Body.Close()
 
-			assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+			assert.Equal(t, 1, numCalls)
 		})
 	}
 }
@@ -70,7 +73,7 @@ func TestOption_WithHostname(t *testing.T) {
 
 	var numCalls int
 
-	router.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+	router.HandleFunc("/", func(_ http.ResponseWriter, req *http.Request) {
 		assert.Equal(t, []string{"my-computer"}, req.Header["X-Machine-Name"])
 
 		numCalls++
@@ -82,15 +85,45 @@ func TestOption_WithHostname(t *testing.T) {
 	require.NoError(t, err)
 
 	c := api.NewClient("", opts...)
-	resp, err := c.Do(req)
+
+	resp, err := c.Do(t.Context(), req)
 	require.NoError(t, err)
 
 	defer resp.Body.Close()
 
-	assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+	assert.Equal(t, 1, numCalls)
+}
+
+func TestOption_WithInvalidHostname(t *testing.T) {
+	url, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var numCalls int
+
+	router.HandleFunc("/", func(_ http.ResponseWriter, req *http.Request) {
+		assert.Equal(t, []string{"my%2Bcomputer%0A"}, req.Header["X-Machine-Name"])
+
+		numCalls++
+	})
+
+	opts := []api.Option{api.WithHostname("my+computer\n")}
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+
+	c := api.NewClient("", opts...)
+
+	resp, err := c.Do(t.Context(), req)
+	require.NoError(t, err)
+
+	defer resp.Body.Close()
+
+	assert.Equal(t, 1, numCalls)
 }
 
 func TestOption_WithNTLM(t *testing.T) {
+	ctx := t.Context()
+
 	tests := map[string]string{
 		"default":  `domain\\john:123456`,
 		"useronly": `domain\\john`,
@@ -106,36 +139,45 @@ func TestOption_WithNTLM(t *testing.T) {
 			router.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 				authHeader, ok := req.Header["Authorization"]
 				if !ok {
+					w.Header().Set("Www-Authenticate", "Basic xyxyxyx")
 					w.WriteHeader(http.StatusUnauthorized)
+
 					return
 				}
 
 				if strings.HasPrefix(authHeader[0], "Basic ") {
-					w.Header().Set("WWW-Authenticate", "NTLM xyxyxyx")
+					w.Header().Set("Www-Authenticate", "NTLM xyxyxyx")
 					w.WriteHeader(http.StatusUnauthorized)
+
 					return
 				}
 
-				msg, err := ntlmssp.NewNegotiateMessage("domain", "")
+				msg, err := ntlmssp.NewNegotiateMessage("", "")
 				require.NoError(t, err)
 
 				numCalls++
+
 				assert.Equal(t, []string{"NTLM " + base64.StdEncoding.EncodeToString(msg)}, authHeader)
+
+				w.WriteHeader(http.StatusOK)
 			})
 
 			withNTLM, err := api.WithNTLM(proxyURL)
 			require.NoError(t, err)
 
-			req, err := http.NewRequest(http.MethodGet, url, nil)
+			req, err := http.NewRequest(http.MethodGet, url+"/", nil)
 			require.NoError(t, err)
 
-			c := api.NewClient("", []api.Option{withNTLM}...)
-			resp, err := c.Do(req)
+			c := api.NewClient(url, []api.Option{withNTLM}...)
+
+			resp, err := c.Do(ctx, req)
 			require.NoError(t, err)
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 			defer resp.Body.Close()
 
-			assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+			assert.Equal(t, 1, numCalls)
 		})
 	}
 }
@@ -143,6 +185,8 @@ func TestOption_WithNTLM(t *testing.T) {
 func TestOption_WithNTLMRequestRetry(t *testing.T) {
 	url, router, close := setupTestServer()
 	defer close()
+
+	ctx := t.Context()
 
 	var numCalls int
 
@@ -163,36 +207,45 @@ func TestOption_WithNTLMRequestRetry(t *testing.T) {
 
 		authHeader, ok := req.Header["Authorization"]
 		if !ok {
+			w.Header().Set("Www-Authenticate", "Basic xyxyxyx")
 			w.WriteHeader(http.StatusUnauthorized)
+
 			return
 		}
 
 		if strings.HasPrefix(authHeader[0], "Basic ") {
 			w.Header().Set("WWW-Authenticate", "NTLM xyxyxyx")
 			w.WriteHeader(http.StatusUnauthorized)
+
 			return
 		}
 
-		msg, err := ntlmssp.NewNegotiateMessage("domain", "")
+		msg, err := ntlmssp.NewNegotiateMessage("", "")
 		require.NoError(t, err)
 
 		numCalls++
+
 		assert.Equal(t, []string{"NTLM " + base64.StdEncoding.EncodeToString(msg)}, authHeader)
+
+		w.WriteHeader(http.StatusOK)
 	})
 
-	withNTLMRetry, err := api.WithNTLMRequestRetry(`domain\\john:secret`)
+	withNTLMRetry, err := api.WithNTLMRequestRetry(ctx, `domain\\john:secret`)
 	require.NoError(t, err)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 
 	c := api.NewClient("", []api.Option{withNTLMRetry}...)
-	resp, err := c.Do(req)
+
+	resp, err := c.Do(ctx, req)
 	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	defer resp.Body.Close()
 
-	assert.Eventually(t, func() bool { return numCalls == 2 }, time.Second, 50*time.Millisecond)
+	assert.Equal(t, 2, numCalls)
 }
 
 func TestOption_WithProxy(t *testing.T) {
@@ -201,7 +254,7 @@ func TestOption_WithProxy(t *testing.T) {
 
 	var numCalls int
 
-	router.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+	router.HandleFunc("/", func(_ http.ResponseWriter, _ *http.Request) {
 		numCalls++
 	})
 
@@ -214,22 +267,53 @@ func TestOption_WithProxy(t *testing.T) {
 	require.NoError(t, err)
 
 	c := api.NewClient("", opts...)
-	resp, err := c.Do(req)
+
+	resp, err := c.Do(t.Context(), req)
 	require.NoError(t, err)
 
 	defer resp.Body.Close()
 
-	assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+	assert.Equal(t, 1, numCalls)
+}
+
+func TestOption_WithProxy_HTTPSFallbackToHTTP(t *testing.T) {
+	url, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var numCalls int
+
+	router.HandleFunc("/", func(_ http.ResponseWriter, _ *http.Request) {
+		numCalls++
+	})
+
+	withProxy, err := api.WithProxy(strings.Replace(url, "http://", "https://", 1))
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodGet, "http://example.org", nil)
+	require.NoError(t, err)
+
+	c := api.NewClient("", []api.Option{withProxy}...)
+
+	resp, err := c.Do(t.Context(), req)
+	require.NoError(t, err)
+
+	defer resp.Body.Close()
+
+	assert.Equal(t, 1, numCalls)
 }
 
 func TestOption_WithUserAgent(t *testing.T) {
 	url, router, tearDown := setupTestServer()
 	defer tearDown()
 
+	ctx := t.Context()
+
 	var numCalls int
 
-	router.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-		info := goInfo.GetInfo()
+	router.HandleFunc("/", func(_ http.ResponseWriter, req *http.Request) {
+		info, err := goInfo.GetInfo()
+		require.NoError(t, err)
+
 		expected := fmt.Sprintf(
 			"wakatime/%s (%s-%s-%s) %s testplugin",
 			version.Version,
@@ -243,28 +327,33 @@ func TestOption_WithUserAgent(t *testing.T) {
 		numCalls++
 	})
 
-	opts := []api.Option{api.WithUserAgent("testplugin")}
+	opts := []api.Option{api.WithUserAgent(ctx, "testplugin")}
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 
 	c := api.NewClient("", opts...)
-	resp, err := c.Do(req)
+
+	resp, err := c.Do(ctx, req)
 	require.NoError(t, err)
 
 	defer resp.Body.Close()
 
-	assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+	assert.Equal(t, 1, numCalls)
 }
 
 func TestOption_WithUserAgentUnknownPlugin(t *testing.T) {
 	url, router, tearDown := setupTestServer()
 	defer tearDown()
 
+	ctx := t.Context()
+
 	var numCalls int
 
-	router.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-		info := goInfo.GetInfo()
+	router.HandleFunc("/", func(_ http.ResponseWriter, req *http.Request) {
+		info, err := goInfo.GetInfo()
+		require.NoError(t, err)
+
 		expected := fmt.Sprintf(
 			"wakatime/%s (%s-%s-%s) %s Unknown/0",
 			version.Version,
@@ -278,16 +367,44 @@ func TestOption_WithUserAgentUnknownPlugin(t *testing.T) {
 		numCalls++
 	})
 
-	opts := []api.Option{api.WithUserAgentUnknownPlugin()}
+	opts := []api.Option{api.WithUserAgent(ctx, "")}
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 
 	c := api.NewClient("", opts...)
-	resp, err := c.Do(req)
+
+	resp, err := c.Do(ctx, req)
 	require.NoError(t, err)
 
 	defer resp.Body.Close()
 
-	assert.Eventually(t, func() bool { return numCalls == 1 }, time.Second, 50*time.Millisecond)
+	assert.Equal(t, 1, numCalls)
+}
+
+func TestOption_WithTimezone(t *testing.T) {
+	url, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var numCalls int
+
+	router.HandleFunc("/", func(_ http.ResponseWriter, req *http.Request) {
+		assert.Equal(t, []string{"America/Sao_Paulo"}, req.Header["Timezone"])
+
+		numCalls++
+	})
+
+	opts := []api.Option{api.WithTimezone("America/Sao_Paulo")}
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+
+	c := api.NewClient("", opts...)
+
+	resp, err := c.Do(t.Context(), req)
+	require.NoError(t, err)
+
+	defer resp.Body.Close()
+
+	assert.Equal(t, 1, numCalls)
 }

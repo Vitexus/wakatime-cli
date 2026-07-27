@@ -10,6 +10,8 @@ import (
 )
 
 func TestParserJSON_Parse(t *testing.T) {
+	ctx := t.Context()
+
 	tests := map[string]struct {
 		Filepath string
 		Expected []string
@@ -49,7 +51,7 @@ func TestParserJSON_Parse(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			parser := deps.ParserJSON{}
 
-			dependencies, err := parser.Parse(test.Filepath)
+			dependencies, err := parser.Parse(ctx, test.Filepath)
 			require.NoError(t, err)
 
 			assert.Equal(t, test.Expected, dependencies)

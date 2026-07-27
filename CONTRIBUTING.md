@@ -9,27 +9,35 @@ To contribute to this project please carefully read this document.
 Prerequisites:
 
 - We use `make` to build and run tests
-- We use `bats` to test shell scripts. Documentation can be found [here](https://bats-core.readthedocs.io/en/latest/installation.html)
-- [Go 1.16](https://golang.org/doc/install)
+- We use [bats](https://bats-core.readthedocs.io/en/latest/installation.html) to test shell scripts. (`brew install bats-core`)
+- We use the [Go](https://golang.org/doc/install) version listed in [go.mod](https://github.com/wakatime/wakatime-cli/blob/develop/go.mod#L3)
 
-After cloning, install dependencies with `make install`.
+After cloning, install dependencies with `make install` then build with `make`.
+
+Tip: run `ln -sf $(pwd)/build/* ~/.wakatime/` to have the plugins use your local build.
 
 ## Branches
 
-This project currently has two branches
+PR branch names must use one of the following prefixes:
 
-- `develop` - Default branch for every new `feature` or `fix`
-- `release` - Branch for production releases and hotfixes
+- `^major/.+` - `major`
+- `^feature/.+` - `minor`
+- `^bugfix/.+` - `patch`
+- `^docs?/.+` - `build`
+- `^misc/.+` - `build`
+
+This branching strategy comes from [semver-action](https://github.com/gandarez/semver-action#branch-names).
+
+We use two branches:
+
+- `develop` - Default branch. PRs are merged to this branch.
+- `release` - Branch for production releases and hotfixes. GitHub Actions automatically builds releases from this branch.
 
 ## Testing and Linting
 
 Run `make test-all` before creating any pull requests, or your PR won’t pass the automated checks.
 
 > make sure you build binary by setting its version otherwise integration tests will fail. `VERSION=v0.0.1-test make build-<os>-<architecture>`. For testing shell scripts you might initialize submodules by running `git submodule update --init --recursive`.
-
-## Branching Stratgegy
-
-Please follow our guideline for branch names [here](https://github.com/wakatime/semver-action#branch-names). Branches off the pattern won't be accepted.
 
 ## Pull Requests
 
@@ -50,5 +58,9 @@ Please follow our guideline for branch names [here](https://github.com/wakatime/
   - See <http://chris.beams.io/posts/git-commit> for more tips on writing good commit messages.
 - Pull request title and description should follow the same guidelines as commit messages.
 - Rebasing pull requests is OK and encouraged. After submitting your pull request some changes may be requested. Prefer using [git fixup](https://git-scm.com/docs/git-commit#Documentation/git-commit.txt---fixupltcommitgt) rather than adding orphan extra commits to the pull request, then do a push to your fork. As soon as your PR gets approved one of us will merge it by rebasing and squashing any residuary commits that were pushed while reviewing. This will help to keep the commit history of the repository clean.
+
+## Troubleshooting
+
+- Race detection is enabled by default on `Makefile` and it may fail on macOS Monterey (OSX 12.0). You might temporarily set the environment variable `MallocNanoZone=0`. More details in this [thread](https://github.com/golang/go/issues/49138).
 
 Any question join us on [Slack](https://wakaslack.herokuapp.com/).

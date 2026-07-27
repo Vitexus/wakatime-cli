@@ -12,7 +12,7 @@ import (
 func TestParserJava_Parse(t *testing.T) {
 	parser := deps.ParserJava{}
 
-	dependencies, err := parser.Parse("testdata/java.java")
+	dependencies, err := parser.Parse(t.Context(), "testdata/java.java")
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{

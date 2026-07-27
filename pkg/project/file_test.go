@@ -1,28 +1,94 @@
 package project_test
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/wakatime/wakatime-cli/pkg/project"
 
+	"github.com/gandarez/go-realpath"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFile_Detect_FileExists(t *testing.T) {
+	tmpDir, err := realpath.Realpath(t.TempDir())
+	require.NoError(t, err)
+
+	copyFile(
+		t,
+		"testdata/wakatime-project",
+		filepath.Join(tmpDir, ".wakatime-project"),
+	)
+
 	f := project.File{
-		Filepath: "testdata/.wakatime-project",
+		Filepath: filepath.Join(tmpDir, ".wakatime-project"),
 	}
 
-	result, detected, err := f.Detect()
+	result, detected, err := f.Detect(t.Context())
 	require.NoError(t, err)
 
 	expected := project.Result{
-		Project: "wakatime-cli",
 		Branch:  "master",
+		Folder:  tmpDir,
+		Project: "wakatime-cli",
+	}
+
+	assert.True(t, detected)
+	assert.Equal(t, expected, result)
+}
+
+func TestFile_Detect_ProjectPlaceholder(t *testing.T) {
+	tmpDir, err := realpath.Realpath(t.TempDir())
+	require.NoError(t, err)
+
+	copyFile(
+		t,
+		"testdata/wakatime-project-placeholder",
+		filepath.Join(tmpDir, ".wakatime-project"),
+	)
+
+	f := project.File{
+		Filepath: filepath.Join(tmpDir, ".wakatime-project"),
+	}
+
+	result, detected, err := f.Detect(t.Context())
+	require.NoError(t, err)
+
+	// File detector returns raw placeholder - interpolation happens in project.go
+	expected := project.Result{
+		Branch:  "master",
+		Folder:  tmpDir,
+		Project: "my-company/{project}",
+	}
+
+	assert.True(t, detected)
+	assert.Equal(t, expected, result)
+}
+
+func TestFile_Detect_ProjectPlaceholderOnly(t *testing.T) {
+	tmpDir, err := realpath.Realpath(t.TempDir())
+	require.NoError(t, err)
+
+	copyFile(
+		t,
+		"testdata/wakatime-project-only-placeholder",
+		filepath.Join(tmpDir, ".wakatime-project"),
+	)
+
+	f := project.File{
+		Filepath: filepath.Join(tmpDir, ".wakatime-project"),
+	}
+
+	result, detected, err := f.Detect(t.Context())
+	require.NoError(t, err)
+
+	// File detector returns raw placeholder - interpolation happens in project.go
+	expected := project.Result{
+		Branch:  "",
+		Folder:  tmpDir,
+		Project: "{project}",
 	}
 
 	assert.True(t, detected)
@@ -30,10 +96,8 @@ func TestFile_Detect_FileExists(t *testing.T) {
 }
 
 func TestFile_Detect_ParentFolderExists(t *testing.T) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime")
+	tmpDir, err := realpath.Realpath(t.TempDir())
 	require.NoError(t, err)
-
-	defer os.RemoveAll(tmpDir)
 
 	dir := filepath.Join(tmpDir, "src", "otherfolder")
 
@@ -42,7 +106,7 @@ func TestFile_Detect_ParentFolderExists(t *testing.T) {
 
 	copyFile(
 		t,
-		"testdata/.wakatime-project",
+		"testdata/wakatime-project",
 		filepath.Join(tmpDir, ".wakatime-project"),
 	)
 
@@ -50,29 +114,32 @@ func TestFile_Detect_ParentFolderExists(t *testing.T) {
 		Filepath: dir,
 	}
 
-	result, detected, err := f.Detect()
+	result, detected, err := f.Detect(t.Context())
 	require.NoError(t, err)
 
 	expected := project.Result{
-		Project: "wakatime-cli",
 		Branch:  "master",
+		Folder:  tmpDir,
+		Project: "wakatime-cli",
 	}
 
 	assert.True(t, detected)
 	assert.Equal(t, expected, result)
 }
 
-func TestFile_Detect_AnyFileFound(t *testing.T) {
-	tmpFile, err := ioutil.TempFile(os.TempDir(), "wakatime-project")
+func TestFile_Detect_NoFileFound(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tmpFile, err := os.CreateTemp(tmpDir, "wakatime-project")
 	require.NoError(t, err)
 
-	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
 
 	f := project.File{
-		Filepath: os.TempDir(),
+		Filepath: tmpDir,
 	}
 
-	result, detected, err := f.Detect()
+	result, detected, err := f.Detect(t.Context())
 	require.NoError(t, err)
 
 	expected := project.Result{}
@@ -82,42 +149,39 @@ func TestFile_Detect_AnyFileFound(t *testing.T) {
 }
 
 func TestFile_Detect_InvalidPath(t *testing.T) {
+	tmpFile, err := os.CreateTemp(t.TempDir(), "non-valid-file")
+	require.NoError(t, err)
+
+	defer tmpFile.Close()
+
 	f := project.File{
-		Filepath: "path/to/non-file",
+		Filepath: tmpFile.Name(),
 	}
 
-	_, detected, err := f.Detect()
+	_, detected, err := f.Detect(t.Context())
 	require.NoError(t, err)
 
 	assert.False(t, detected)
 }
 
-func TestFile_String(t *testing.T) {
-	f := project.File{}
-
-	assert.Equal(t, "project-file-detector", f.String())
-}
-
 func TestFindFileOrDirectory(t *testing.T) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime")
-	require.NoError(t, err)
-
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	dir := filepath.Join(tmpDir, "src", "otherfolder")
 
-	err = os.MkdirAll(dir, os.FileMode(int(0700)))
+	err := os.MkdirAll(dir, os.FileMode(int(0700)))
 	require.NoError(t, err)
 
 	copyFile(
 		t,
-		"testdata/.wakatime-project",
+		"testdata/wakatime-project",
 		filepath.Join(tmpDir, ".wakatime-project"),
 	)
 
+	ctx := t.Context()
+
 	tests := map[string]struct {
 		Filepath string
-		FileDir  string
 		Filename string
 		Expected string
 	}{
@@ -135,7 +199,7 @@ func TestFindFileOrDirectory(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			fp, ok := project.FindFileOrDirectory(test.Filepath, test.FileDir, test.Filename)
+			fp, ok := project.FindFileOrDirectory(ctx, test.Filepath, test.Filename)
 			require.True(t, ok)
 
 			assert.Equal(t, test.Expected, fp)
@@ -143,10 +207,16 @@ func TestFindFileOrDirectory(t *testing.T) {
 	}
 }
 
+func TestFile_ID(t *testing.T) {
+	f := project.File{}
+
+	assert.Equal(t, project.FileDetector, f.ID())
+}
+
 func copyFile(t *testing.T, source, destination string) {
-	input, err := ioutil.ReadFile(source)
+	input, err := os.ReadFile(source)
 	require.NoError(t, err)
 
-	err = ioutil.WriteFile(destination, input, 0600)
+	err = os.WriteFile(destination, input, 0600)
 	require.NoError(t, err)
 }

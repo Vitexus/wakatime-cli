@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"github.com/wakatime/wakatime-cli/pkg/project"
+	"github.com/wakatime/wakatime-cli/pkg/regex"
 
+	"github.com/gandarez/go-realpath"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,20 +18,25 @@ func TestMap_Detect(t *testing.T) {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 
+	rp, err := realpath.Realpath(filepath.Join("testdata", "entity.any"))
+	require.NoError(t, err)
+
 	m := project.Map{
-		Filepath: "testdata/entity.any",
+		Filepath: rp,
 		Patterns: []project.MapPattern{
 			{
 				Name:  "my-project-1",
-				Regex: regexp.MustCompile(formatRegex(filepath.Join(wd, "testdata"))),
+				Regex: regex.NewRegexpWrap(regexp.MustCompile(formatRegex(filepath.Join(wd, "testdata")))),
 			},
 		},
 	}
 
-	result, detected, err := m.Detect()
+	result, detected, err := m.Detect(t.Context())
 	require.NoError(t, err)
 
 	assert.True(t, detected)
+
+	assert.Contains(t, result.Folder, "testdata")
 	assert.Equal(t, "my-project-1", result.Project)
 }
 
@@ -37,24 +44,29 @@ func TestMap_Detect_RegexReplace(t *testing.T) {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 
+	rp, err := realpath.Realpath(filepath.Join("testdata", "entity.any"))
+	require.NoError(t, err)
+
 	m := project.Map{
-		Filepath: filepath.Join("testdata", "entity.any"),
+		Filepath: rp,
 		Patterns: []project.MapPattern{
 			{
 				Name:  "my-project-1",
-				Regex: regexp.MustCompile(formatRegex(filepath.Join(wd, "path", "to", "otherfolder"))),
+				Regex: regex.NewRegexpWrap(regexp.MustCompile(formatRegex(filepath.Join(wd, "path", "to", "otherfolder")))),
 			},
 			{
 				Name:  "my-project-2-{0}",
-				Regex: regexp.MustCompile(formatRegex(filepath.Join(wd, `test([a-zA-Z]+)`))),
+				Regex: regex.NewRegexpWrap(regexp.MustCompile(formatRegex(filepath.Join(wd, `test([a-zA-Z]+)`)))),
 			},
 		},
 	}
 
-	result, detected, err := m.Detect()
+	result, detected, err := m.Detect(t.Context())
 	require.NoError(t, err)
 
 	assert.True(t, detected)
+
+	assert.Contains(t, result.Folder, "testdata")
 	assert.Equal(t, "my-project-2-data", result.Project)
 }
 
@@ -67,19 +79,21 @@ func TestMap_Detect_NoMatch(t *testing.T) {
 		Patterns: []project.MapPattern{
 			{
 				Name:  "my_project_1",
-				Regex: regexp.MustCompile(formatRegex(filepath.Join(wd, "path", "to", "otherfolder"))),
+				Regex: regex.NewRegexpWrap(regexp.MustCompile(formatRegex(filepath.Join(wd, "path", "to", "otherfolder")))),
 			},
 			{
 				Name:  "my_project_2",
-				Regex: regexp.MustCompile(formatRegex(filepath.Join(wd, "path", "to", "temp"))),
+				Regex: regex.NewRegexpWrap(regexp.MustCompile(formatRegex(filepath.Join(wd, "path", "to", "temp")))),
 			},
 		},
 	}
 
-	result, detected, err := m.Detect()
+	result, detected, err := m.Detect(t.Context())
 	require.NoError(t, err)
 
 	assert.False(t, detected)
+
+	assert.Empty(t, result.Folder)
 	assert.Empty(t, result.Project)
 }
 
@@ -88,14 +102,14 @@ func TestMap_Detect_ZeroPatterns(t *testing.T) {
 		Patterns: []project.MapPattern{},
 	}
 
-	_, detected, err := m.Detect()
+	_, detected, err := m.Detect(t.Context())
 	require.NoError(t, err)
 
 	assert.False(t, detected)
 }
 
-func TestMap_String(t *testing.T) {
+func TestMap_ID(t *testing.T) {
 	m := project.Map{}
 
-	assert.Equal(t, "project-map-detector", m.String())
+	assert.Equal(t, project.MapDetector, m.ID())
 }

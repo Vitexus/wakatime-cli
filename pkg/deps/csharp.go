@@ -1,14 +1,16 @@
 package deps
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"regexp"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/lexers/c"
+	"github.com/wakatime/wakatime-cli/pkg/file"
+	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 )
 
 var csharpExcludeRegex = regexp.MustCompile(`(?i)^(system|microsoft)$`)
@@ -26,29 +28,27 @@ const (
 // ParserCSharp is a dependency parser for the c# programming language.
 // It is not thread safe.
 type ParserCSharp struct {
-	State  StateCSharp
 	Buffer string
 	Output []string
+	State  StateCSharp
 }
 
 // Parse parses dependencies from C# file content using the chroma C# lexer.
-func (p *ParserCSharp) Parse(filepath string) ([]string, error) {
-	reader, err := os.Open(filepath)
+func (p *ParserCSharp) Parse(ctx context.Context, filepath string) ([]string, error) {
+	head, err := file.ReadHead(ctx, filepath, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %s", filepath, err)
+		return nil, fmt.Errorf("failed to read: %s", err)
 	}
-
-	defer reader.Close()
 
 	p.init()
 	defer p.init()
 
-	data, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read from reader: %s", err)
+	l := lexers.Get(heartbeat.LanguageCSharp.String())
+	if l == nil {
+		return nil, fmt.Errorf("failed to get lexer for %s", heartbeat.LanguageCSharp.String())
 	}
 
-	iter, err := c.CSharp.Tokenise(nil, string(data))
+	iter, err := l.Tokenise(nil, string(head))
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize file content: %s", err)
 	}
@@ -75,8 +75,9 @@ func (p *ParserCSharp) append(dep string) {
 }
 
 func (p *ParserCSharp) init() {
-	p.State = StateCSharpUnknown
+	p.Buffer = ""
 	p.Output = nil
+	p.State = StateCSharpUnknown
 }
 
 func (p *ParserCSharp) processToken(token chroma.Token) {

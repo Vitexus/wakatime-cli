@@ -12,7 +12,7 @@ import (
 func TestParserGo_Parse(t *testing.T) {
 	parser := deps.ParserGo{}
 
-	dependencies, err := parser.Parse("testdata/golang.go")
+	dependencies, err := parser.Parse(t.Context(), "testdata/golang.go")
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{

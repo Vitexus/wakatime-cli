@@ -12,7 +12,7 @@ import (
 func TestParserVbNet_Parse(t *testing.T) {
 	parser := deps.ParserVbNet{}
 
-	dependencies, err := parser.Parse("testdata/vbnet.vb")
+	dependencies, err := parser.Parse(t.Context(), "testdata/vbnet.vb")
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{

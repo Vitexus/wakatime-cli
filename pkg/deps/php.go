@@ -1,17 +1,18 @@
 package deps
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"regexp"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/lexers/circular"
+	"github.com/wakatime/wakatime-cli/pkg/file"
+	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 )
 
-// nolint:noglobals
 var phpExcludeRegex = regexp.MustCompile(`(?i)(^app|app\.php)$`)
 
 // StatePHP is a token parsing state.
@@ -38,23 +39,21 @@ type ParserPHP struct {
 }
 
 // Parse parses dependencies from PHP file content using the chroma PHP lexer.
-func (p *ParserPHP) Parse(filepath string) ([]string, error) {
-	reader, err := os.Open(filepath)
+func (p *ParserPHP) Parse(ctx context.Context, filepath string) ([]string, error) {
+	head, err := file.ReadHead(ctx, filepath, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %s", filepath, err)
+		return nil, fmt.Errorf("failed to read: %s", err)
 	}
-
-	defer reader.Close()
 
 	p.init()
 	defer p.init()
 
-	data, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read from reader: %s", err)
+	l := lexers.Get(heartbeat.LanguagePHP.String())
+	if l == nil {
+		return nil, fmt.Errorf("failed to get lexer for %s", heartbeat.LanguagePHP.String())
 	}
 
-	iter, err := circular.PHP.Tokenise(nil, string(data))
+	iter, err := l.Tokenise(nil, string(head))
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize file content: %s", err)
 	}
@@ -104,7 +103,6 @@ func (p *ParserPHP) processToken(token chroma.Token) {
 	case chroma.Punctuation:
 		p.processPunctuation(token.Value)
 	case chroma.Text, chroma.Operator:
-		break
 	default:
 		p.State = StatePHPUnknown
 	}
@@ -155,7 +153,6 @@ func (p *ParserPHP) processNameOther(value string) {
 func (p *ParserPHP) processPunctuation(value string) {
 	switch {
 	case value == "(" || value == ")":
-		break
 	case (p.State == StatePHPUse || p.State == StatePHPAs) && value == ",":
 		p.State = StatePHPUse
 	default:

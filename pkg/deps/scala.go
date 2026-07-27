@@ -1,13 +1,15 @@
 package deps
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/lexers/s"
+	"github.com/wakatime/wakatime-cli/pkg/file"
+	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 )
 
 // StateScala is a token parsing state.
@@ -28,23 +30,21 @@ type ParserScala struct {
 }
 
 // Parse parses dependencies from Scala file content using the chroma Scala lexer.
-func (p *ParserScala) Parse(filepath string) ([]string, error) {
-	reader, err := os.Open(filepath)
+func (p *ParserScala) Parse(ctx context.Context, filepath string) ([]string, error) {
+	head, err := file.ReadHead(ctx, filepath, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %s", filepath, err)
+		return nil, fmt.Errorf("failed to read: %s", err)
 	}
-
-	defer reader.Close()
 
 	p.init()
 	defer p.init()
 
-	data, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read from reader: %s", err)
+	l := lexers.Get(heartbeat.LanguageScala.String())
+	if l == nil {
+		return nil, fmt.Errorf("failed to get lexer for %s", heartbeat.LanguageScala.String())
 	}
 
-	iter, err := s.Scala.Tokenise(nil, string(data))
+	iter, err := l.Tokenise(nil, string(head))
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize file content: %s", err)
 	}
@@ -90,7 +90,7 @@ func (p *ParserScala) processKeyword(value string) {
 }
 
 func (p *ParserScala) processNameNamespace(value string) {
-	switch p.State {
+	switch p.State { // nolint:exhaustive
 	case StateScalaImport:
 		p.append(value)
 	default:

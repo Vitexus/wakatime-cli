@@ -12,7 +12,7 @@ import (
 func TestParserScala_Parse(t *testing.T) {
 	parser := deps.ParserScala{}
 
-	dependencies, err := parser.Parse("testdata/scala.scala")
+	dependencies, err := parser.Parse(t.Context(), "testdata/scala.scala")
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{

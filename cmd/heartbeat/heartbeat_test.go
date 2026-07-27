@@ -1,0 +1,1647 @@
+package heartbeat_test
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	cmdheartbeat "github.com/wakatime/wakatime-cli/cmd/heartbeat"
+	"github.com/wakatime/wakatime-cli/pkg/api"
+	"github.com/wakatime/wakatime-cli/pkg/file"
+	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
+	"github.com/wakatime/wakatime-cli/pkg/ini"
+	"github.com/wakatime/wakatime-cli/pkg/log"
+	"github.com/wakatime/wakatime-cli/pkg/log/setup"
+	"github.com/wakatime/wakatime-cli/pkg/offline"
+	"github.com/wakatime/wakatime-cli/pkg/params"
+	"github.com/wakatime/wakatime-cli/pkg/project"
+	"github.com/wakatime/wakatime-cli/pkg/version"
+	"github.com/wakatime/wakatime-cli/pkg/windows"
+
+	"github.com/gandarez/go-realpath"
+	"github.com/matishsiao/goInfo"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	bolt "go.etcd.io/bbolt"
+)
+
+func TestMain(m *testing.M) {
+	home, err := os.MkdirTemp("", "wakatime-cli-cmd-heartbeat-test-home")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create test home: %s\n", err)
+		os.Exit(1)
+	}
+
+	_ = os.Setenv("HOME", home)
+	_ = os.Setenv("USERPROFILE", home)
+	_ = os.Setenv("WAKATIME_HOME", home)
+	_ = os.Unsetenv("WAKATIME_API_KEY")
+
+	code := m.Run()
+
+	_ = os.RemoveAll(home)
+
+	os.Exit(code)
+}
+
+func TestSendHeartbeats(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var (
+		plugin   = "plugin/0.0.1"
+		numCalls int
+	)
+
+	tmpFile, err := os.CreateTemp(t.TempDir(), "wakatime-config")
+	require.NoError(t, err)
+
+	defer tmpFile.Close()
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, req *http.Request) {
+		numCalls++
+
+		// check request
+		assert.Equal(t, http.MethodPost, req.Method)
+		assert.Equal(t, []string{"application/json"}, req.Header["Accept"])
+		assert.Equal(t, []string{"application/json"}, req.Header["Content-Type"])
+		assert.Equal(t, []string{"Basic MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAw"}, req.Header["Authorization"])
+		assert.True(t, strings.HasSuffix(req.Header["User-Agent"][0], plugin), fmt.Sprintf(
+			"%q should have suffix %q",
+			req.Header["User-Agent"][0],
+			plugin,
+		))
+
+		expectedBody, err := os.ReadFile("testdata/api_heartbeats_request_template.json")
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+
+		var entity struct {
+			Entity string `json:"entity"`
+		}
+
+		err = json.Unmarshal(body, &[]any{&entity})
+		require.NoError(t, err)
+
+		expectedBodyStr := fmt.Sprintf(
+			string(expectedBody),
+			entity.Entity,
+			projectRootCountForEntity(entity.Entity),
+			heartbeat.UserAgent(t.Context(), plugin),
+		)
+
+		assert.True(t, strings.HasSuffix(entity.Entity, "testdata/main.go"))
+		assertJSONEqIgnoringProjectRootCount(t, expectedBodyStr, string(body))
+
+		// send response
+		w.WriteHeader(http.StatusCreated)
+
+		f, err := os.Open("testdata/api_heartbeats_response.json")
+		require.NoError(t, err)
+
+		defer f.Close()
+
+		_, err = io.Copy(w, f)
+		require.NoError(t, err)
+	})
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("api-url", testServerURL)
+	v.Set("config", tmpFile.Name())
+	v.Set("category", "debugging")
+	v.Set("cursorpos", 42)
+	v.Set("entity", "testdata/main.go")
+	v.Set("entity-type", "file")
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("language", "Go")
+	v.Set("alternate-language", "Golang")
+	v.Set("hide-branch-names", true)
+	v.Set("projectmap..*", "wakatime-cli")
+	v.Set("lineno", 13)
+	v.Set("local-file", "testdata/localfile.go")
+	v.Set("plugin", plugin)
+	v.Set("time", 1585598059.1)
+	v.Set("timeout", 5)
+	v.Set("write", true)
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(t.Context(), v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(t.Context(), v, params, offlineQueueFile.Name(), heartbeats)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, numCalls)
+}
+
+func TestRunSuccess(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var numCalls int
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, req *http.Request) {
+		numCalls++
+
+		assert.Equal(t, http.MethodPost, req.Method)
+
+		w.WriteHeader(http.StatusCreated)
+
+		f, err := os.Open("testdata/api_heartbeats_response.json")
+		require.NoError(t, err)
+
+		defer f.Close()
+
+		_, err = io.Copy(w, f)
+		require.NoError(t, err)
+	})
+
+	tmpFile, err := os.CreateTemp(t.TempDir(), "wakatime-config")
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "offline-queue-file")
+	require.NoError(t, err)
+	require.NoError(t, offlineQueueFile.Close())
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("api-url", testServerURL)
+	v.Set("category", "debugging")
+	v.Set("config", tmpFile.Name())
+	v.Set("cursorpos", 42)
+	v.Set("entity", "testdata/main.go")
+	v.Set("entity-type", "file")
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("language", "Go")
+	v.Set("offline-queue-file", offlineQueueFile.Name())
+	v.Set("plugin", "plugin/0.0.1")
+	v.Set("time", 1585598059.1)
+	v.Set("timeout", 5)
+	v.Set("write", true)
+
+	code, err := cmdheartbeat.Run(t.Context(), v)
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+	assert.Equal(t, 1, numCalls)
+}
+
+func TestSendHeartbeats_RateLimited(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var (
+		plugin   = "plugin/0.0.1"
+		numCalls int
+	)
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(_ http.ResponseWriter, _ *http.Request) {
+		// Should not be called
+		numCalls++
+	})
+
+	tmpFile, err := os.CreateTemp(t.TempDir(), "wakatime-config")
+	require.NoError(t, err)
+
+	defer tmpFile.Close()
+
+	tmpFileInternal, err := os.CreateTemp(t.TempDir(), "wakatime-internal-config")
+	require.NoError(t, err)
+
+	defer tmpFileInternal.Close()
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "offline-queue-file")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("api-url", testServerURL)
+	v.Set("category", "debugging")
+	v.Set("cursorpos", 42)
+	v.Set("entity", "testdata/main.go")
+	v.Set("entity-type", "file")
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("language", "Go")
+	v.Set("alternate-language", "Golang")
+	v.Set("hide-branch-names", true)
+	v.Set("projectmap..*", "wakatime-cli")
+	v.Set("lineno", 13)
+	v.Set("local-file", "testdata/localfile.go")
+	v.Set("plugin", plugin)
+	v.Set("time", 1585598059.1)
+	v.Set("timeout", 5)
+	v.Set("write", true)
+	v.Set("heartbeat-rate-limit-seconds", 500)
+	v.Set("config", tmpFile.Name())
+	v.Set("internal-config", tmpFileInternal.Name())
+	v.Set("offline-queue-file", offlineQueueFile.Name())
+	v.Set("internal.heartbeats_last_sent_at", time.Now().Add(-time.Minute).Format(time.RFC3339))
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(t.Context(), v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(t.Context(), v, params, offlineQueueFile.Name(), heartbeats)
+	require.NoError(t, err)
+
+	assert.Zero(t, numCalls)
+}
+
+func TestSendHeartbeats_WithFiltering_Exclude(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var numCalls int
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+
+		numCalls++
+	})
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("api-url", testServerURL)
+	v.Set("category", "debugging")
+	v.Set("entity", `\tmp\main.go`)
+	v.Set("exclude", `/tmp/`)
+	v.Set("entity-type", "file")
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("plugin", "plugin")
+	v.Set("time", 1585598059.1)
+	v.Set("timeout", 5)
+	v.Set("write", true)
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(t.Context(), v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(t.Context(), v, params, offlineQueueFile.Name(), heartbeats)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, numCalls)
+}
+
+func TestSendHeartbeats_WithFiltering_Exclude_All(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var numCalls int
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+
+		numCalls++
+	})
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("api-url", testServerURL)
+	v.Set("category", "debugging")
+	v.Set("entity", `\tmp\main.go`)
+	v.Set("exclude", `true`)
+	v.Set("entity-type", "file")
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("plugin", "plugin")
+	v.Set("time", 1585598059.1)
+	v.Set("timeout", 5)
+	v.Set("write", true)
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(t.Context(), v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(t.Context(), v, params, offlineQueueFile.Name(), heartbeats)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, numCalls)
+}
+
+func TestSendHeartbeats_ExtraHeartbeats(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var (
+		plugin   = "plugin/0.0.1"
+		numCalls int
+	)
+
+	ctx := t.Context()
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, req *http.Request) {
+		// check request
+		expectedBody, err := os.ReadFile("testdata/api_heartbeats_request_extra_heartbeats_template.json")
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+
+		var entities []struct {
+			Entity string `json:"entity"`
+		}
+
+		err = json.Unmarshal(body, &entities)
+		require.NoError(t, err)
+
+		assert.True(t, strings.HasSuffix(entities[0].Entity, "testdata/main.go"))
+		assert.True(t, strings.HasSuffix(entities[1].Entity, "testdata/main.go"))
+		assert.True(t, strings.HasSuffix(entities[2].Entity, "testdata/main.py"))
+
+		require.Len(t, entities, offline.SendLimit)
+
+		for i := 3; i < offline.SendLimit; i++ {
+			assert.True(t, strings.HasSuffix(entities[i].Entity, "testdata/main.go"))
+		}
+
+		userAgent := heartbeat.UserAgent(ctx, plugin)
+
+		expectedBodyStr := fmt.Sprintf(
+			string(expectedBody),
+			heartbeatTemplateArgs(padHeartbeatTemplateEntities(string(expectedBody), entities), userAgent)...,
+		)
+
+		assertJSONPrefixEqIgnoringProjectRootCount(t, expectedBodyStr, string(body))
+
+		// send response
+		w.WriteHeader(http.StatusCreated)
+
+		f, err := os.Open("testdata/api_heartbeats_response_extra_heartbeats.json")
+		require.NoError(t, err)
+
+		defer f.Close()
+
+		_, err = io.Copy(w, f)
+		require.NoError(t, err)
+
+		numCalls++
+	})
+
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+
+	defer func() {
+		r.Close()
+		w.Close()
+	}()
+
+	origStdin := os.Stdin
+
+	defer func() { os.Stdin = origStdin }()
+
+	os.Stdin = r
+
+	data, err := os.ReadFile("testdata/extra_heartbeats.json")
+	require.NoError(t, err)
+
+	go func() {
+		_, err := w.Write(data)
+		require.NoError(t, err)
+
+		w.Close()
+	}()
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 0)
+	v.Set("api-url", testServerURL)
+	v.Set("category", "debugging")
+	v.Set("cursorpos", 1)
+	v.Set("entity", "testdata/main.go")
+	v.Set("entity-type", "file")
+	v.Set("extra-heartbeats", true)
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("hide-branch-names", true)
+	v.Set("projectmap..*", "wakatime-cli")
+	v.Set("language", "Go")
+	v.Set("alternate-language", "Golang")
+	v.Set("lineno", 2)
+	v.Set("plugin", plugin)
+	v.Set("time", 1585598059.1)
+	v.Set("timeout", 5)
+	v.Set("write", true)
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(ctx, v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(ctx, v, params, offlineQueueFile.Name(), heartbeats)
+	require.NoError(t, err)
+
+	offlineCount, err := offline.CountHeartbeats(ctx, offlineQueueFile.Name())
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, offlineCount)
+
+	assert.Equal(t, 1, numCalls)
+}
+
+func TestSendHeartbeats_ExtraHeartbeatsNestedError(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var (
+		plugin   = "plugin/0.0.1"
+		numCalls int
+	)
+
+	ctx := t.Context()
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, req *http.Request) {
+		// check request
+		expectedBody, err := os.ReadFile("testdata/api_heartbeats_request_extra_heartbeats_template.json")
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+
+		var entities []struct {
+			Entity string `json:"entity"`
+		}
+
+		err = json.Unmarshal(body, &entities)
+		require.NoError(t, err)
+
+		assert.True(t, strings.HasSuffix(entities[0].Entity, "testdata/main.go"))
+		assert.True(t, strings.HasSuffix(entities[1].Entity, "testdata/main.go"))
+		assert.True(t, strings.HasSuffix(entities[2].Entity, "testdata/main.py"))
+
+		require.Len(t, entities, offline.SendLimit)
+
+		for i := 3; i < offline.SendLimit; i++ {
+			assert.True(t, strings.HasSuffix(entities[i].Entity, "testdata/main.go"))
+		}
+
+		userAgent := heartbeat.UserAgent(ctx, plugin)
+
+		expectedBodyStr := fmt.Sprintf(
+			string(expectedBody),
+			heartbeatTemplateArgs(padHeartbeatTemplateEntities(string(expectedBody), entities), userAgent)...,
+		)
+
+		assertJSONPrefixEqIgnoringProjectRootCount(t, expectedBodyStr, string(body))
+
+		// send response
+		w.WriteHeader(http.StatusCreated)
+
+		f, err := os.Open("testdata/api_heartbeats_response_extra_heartbeats_error.json")
+		require.NoError(t, err)
+
+		defer f.Close()
+
+		_, err = io.Copy(w, f)
+		require.NoError(t, err)
+
+		numCalls++
+	})
+
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+
+	defer func() {
+		r.Close()
+		w.Close()
+	}()
+
+	origStdin := os.Stdin
+
+	defer func() { os.Stdin = origStdin }()
+
+	os.Stdin = r
+
+	data, err := os.ReadFile("testdata/extra_heartbeats.json")
+	require.NoError(t, err)
+
+	go func() {
+		_, err := w.Write(data)
+		require.NoError(t, err)
+
+		w.Close()
+	}()
+
+	tmpDir := t.TempDir()
+
+	logFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+
+	defer logFile.Close()
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 0)
+	v.Set("api-url", testServerURL)
+	v.Set("category", "debugging")
+	v.Set("cursorpos", 1)
+	v.Set("entity", "testdata/main.go")
+	v.Set("entity-type", "file")
+	v.Set("extra-heartbeats", true)
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("hide-branch-names", true)
+	v.Set("projectmap..*", "wakatime-cli")
+	v.Set("language", "Go")
+	v.Set("alternate-language", "Golang")
+	v.Set("lineno", 2)
+	v.Set("plugin", plugin)
+	v.Set("time", 1585598059.1)
+	v.Set("timeout", 5)
+	v.Set("write", true)
+	v.Set("log-file", logFile.Name())
+	v.Set("verbose", true)
+
+	logger, err := setup.Logging(ctx, v)
+	require.NoError(t, err)
+
+	defer logger.Flush()
+
+	ctx = log.ToContext(ctx, logger)
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(ctx, v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(ctx, v, params, offlineQueueFile.Name(), heartbeats)
+	require.NoError(t, err)
+
+	output, err := io.ReadAll(logFile)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(output), "This heartbeat will be saved offline.")
+
+	offlineCount, err := offline.CountHeartbeats(ctx, offlineQueueFile.Name())
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, offlineCount)
+
+	assert.Equal(t, 1, numCalls)
+}
+
+func TestSendHeartbeats_ExtraHeartbeats_Sanitize(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var (
+		plugin   = "plugin/0.0.1"
+		numCalls int
+	)
+
+	ctx := t.Context()
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, _ *http.Request) {
+		// send response
+		w.WriteHeader(http.StatusCreated)
+
+		f, err := os.Open("testdata/api_heartbeats_response_extra_heartbeats.json")
+		require.NoError(t, err)
+
+		defer f.Close()
+
+		_, err = io.Copy(w, f)
+		require.NoError(t, err)
+
+		numCalls++
+	})
+
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+
+	defer func() {
+		r.Close()
+		w.Close()
+	}()
+
+	origStdin := os.Stdin
+
+	defer func() { os.Stdin = origStdin }()
+
+	os.Stdin = r
+
+	data, err := os.ReadFile("testdata/extra_heartbeats.json")
+	require.NoError(t, err)
+
+	go func() {
+		_, err := w.Write(data)
+		require.NoError(t, err)
+
+		w.Close()
+	}()
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 0)
+	v.Set("api-url", testServerURL)
+	v.Set("category", "debugging")
+	v.Set("cursorpos", 42)
+	v.Set("entity", "testdata/main.go")
+	v.Set("entity-type", "file")
+	v.Set("extra-heartbeats", true)
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("hide-branch-names", true)
+	v.Set("hide-file-names", true)
+	v.Set("projectmap..*", "wakatime-cli")
+	v.Set("language", "Go")
+	v.Set("alternate-language", "Golang")
+	v.Set("lineno", 13)
+	v.Set("plugin", plugin)
+	v.Set("time", 1585598059.1)
+	v.Set("timeout", 5)
+	v.Set("write", true)
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(ctx, v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(ctx, v, params, offlineQueueFile.Name(), heartbeats)
+	require.NoError(t, err)
+
+	offlineCount, err := offline.CountHeartbeats(ctx, offlineQueueFile.Name())
+	require.NoError(t, err)
+
+	db, err := bolt.Open(offlineQueueFile.Name(), 0600, nil)
+	require.NoError(t, err)
+
+	defer func() {
+		err = db.Close()
+		require.NoError(t, err)
+	}()
+
+	tx, err := db.Begin(true)
+	require.NoError(t, err)
+
+	q := offline.NewQueue(tx)
+
+	hh, err := q.PopMany(1)
+	require.NoError(t, err)
+
+	err = tx.Commit()
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, offlineCount)
+	assert.Len(t, hh, 1)
+
+	info, err := goInfo.GetInfo()
+	require.NoError(t, err)
+
+	userAgent := fmt.Sprintf(
+		"wakatime/%s (%s-%s-%s) %s %s",
+		version.Version,
+		runtime.GOOS,
+		info.Core,
+		info.Platform,
+		runtime.Version(),
+		plugin,
+	)
+
+	assert.Equal(t, []heartbeat.Heartbeat{
+		{
+			Branch:           nil,
+			Category:         heartbeat.WritingTestsCategory.String(),
+			CursorPosition:   nil,
+			Dependencies:     nil,
+			Entity:           "HIDDEN.go",
+			EntityType:       heartbeat.FileType,
+			IsWrite:          heartbeat.PointerTo(true),
+			Language:         heartbeat.PointerTo("Go"),
+			LineNumber:       nil,
+			Lines:            nil,
+			Project:          heartbeat.PointerTo("wakatime-cli"),
+			ProjectRootCount: nil,
+			Time:             1585598059,
+			UserAgent:        userAgent,
+		}}, hh)
+
+	assert.Equal(t, 1, numCalls)
+}
+
+func TestSendHeartbeats_NonExistingEntity(t *testing.T) {
+	resetSingleton(t)
+
+	tmpDir := t.TempDir()
+
+	logFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+
+	defer logFile.Close()
+
+	ctx := t.Context()
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("api-url", "https://example.org")
+	v.Set("entity", "nonexisting")
+	v.Set("entity-type", "file")
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("log-file", logFile.Name())
+	v.Set("verbose", true)
+
+	logger, err := setup.Logging(ctx, v)
+	require.NoError(t, err)
+
+	defer logger.Flush()
+
+	ctx = log.ToContext(ctx, logger)
+
+	offlineQueueFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(ctx, v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(ctx, v, params, offlineQueueFile.Name(), heartbeats)
+	require.NoError(t, err)
+
+	output, err := io.ReadAll(logFile)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(output), "skipping because of non-existing file")
+}
+
+func TestSendHeartbeats_ExtraHeartbeatsIsUnsavedEntity(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var (
+		plugin   = "plugin/0.0.1"
+		numCalls int
+	)
+
+	ctx := t.Context()
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, req *http.Request) {
+		// check request
+		expectedBody, err := os.ReadFile("testdata/api_heartbeats_request_is_unsaved_entity_template.json")
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+
+		var entities []struct {
+			Entity string `json:"entity"`
+		}
+
+		err = json.Unmarshal(body, &entities)
+		require.NoError(t, err)
+
+		assert.True(t, strings.HasSuffix(entities[0].Entity, "missing"))
+		assert.True(t, strings.HasSuffix(entities[1].Entity, "missing-from-extra-heartbeats"))
+		assert.True(t, strings.HasSuffix(entities[2].Entity, "main.go"))
+
+		userAgent := heartbeat.UserAgent(ctx, plugin)
+
+		expectedBodyStr := fmt.Sprintf(
+			string(expectedBody),
+			entities[0].Entity, projectRootCountForEntity(entities[0].Entity), userAgent,
+			entities[1].Entity, projectRootCountForEntity(entities[1].Entity), userAgent,
+			entities[2].Entity, projectRootCountForEntity(entities[2].Entity), userAgent,
+		)
+
+		assertJSONEqIgnoringProjectRootCount(t, expectedBodyStr, string(body))
+
+		// send response
+		w.WriteHeader(http.StatusCreated)
+
+		f, err := os.Open("testdata/api_heartbeats_response_is_unsaved_entity.json")
+		require.NoError(t, err)
+
+		defer f.Close()
+
+		_, err = io.Copy(w, f)
+		require.NoError(t, err)
+
+		numCalls++
+	})
+
+	inr, inw, err := os.Pipe()
+	require.NoError(t, err)
+
+	defer func() {
+		inr.Close()
+		inw.Close()
+	}()
+
+	origStdin := os.Stdin
+
+	defer func() { os.Stdin = origStdin }()
+
+	os.Stdin = inr
+
+	data, err := os.ReadFile("testdata/extra_heartbeats_is_unsaved_entity.json")
+	require.NoError(t, err)
+
+	go func() {
+		_, err := inw.Write(data)
+		require.NoError(t, err)
+
+		inw.Close()
+	}()
+
+	tmpDir := t.TempDir()
+
+	logFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+
+	defer logFile.Close()
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("api-url", testServerURL)
+	v.Set("is-unsaved-entity", true)
+	v.Set("category", "coding")
+	v.Set("cursorpos", 41)
+	v.Set("entity", "missing")
+	v.Set("entity-type", "file")
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("language", "Go")
+	v.Set("alternate-language", "Golang")
+	v.Set("projectmap..*", "wakatime-cli")
+	v.Set("hide-branch-names", true)
+	v.Set("lineno", 11)
+	v.Set("lines-in-file", 91)
+	v.Set("plugin", plugin)
+	v.Set("time", 1585598051)
+	v.Set("extra-heartbeats", true)
+	v.Set("log-file", logFile.Name())
+	v.Set("verbose", true)
+
+	logger, err := setup.Logging(ctx, v)
+	require.NoError(t, err)
+
+	defer logger.Flush()
+
+	ctx = log.ToContext(ctx, logger)
+
+	offlineQueueFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(ctx, v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(ctx, v, params, offlineQueueFile.Name(), heartbeats)
+	require.NoError(t, err)
+
+	output, err := io.ReadAll(logFile)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(output), "skipping because of non-existing file")
+}
+
+func TestSendHeartbeats_NonExistingExtraHeartbeatsEntity(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var (
+		plugin   = "plugin/0.0.1"
+		numCalls int
+	)
+
+	ctx := t.Context()
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, req *http.Request) {
+		// check request
+		expectedBody, err := os.ReadFile("testdata/api_heartbeats_request_extra_heartbeats_filtered_template.json")
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+
+		var entities []struct {
+			Entity string `json:"entity"`
+		}
+
+		err = json.Unmarshal(body, &entities)
+		require.NoError(t, err)
+
+		assert.True(t, strings.HasSuffix(entities[0].Entity, "testdata/main.go"))
+		assert.True(t, strings.HasSuffix(entities[1].Entity, "testdata/main.py"))
+
+		userAgent := heartbeat.UserAgent(ctx, plugin)
+
+		expectedBodyStr := fmt.Sprintf(
+			string(expectedBody),
+			entities[0].Entity, projectRootCountForEntity(entities[0].Entity), userAgent,
+			entities[1].Entity, projectRootCountForEntity(entities[1].Entity), userAgent,
+		)
+
+		assertJSONEqIgnoringProjectRootCount(t, expectedBodyStr, string(body))
+
+		// send response
+		w.WriteHeader(http.StatusCreated)
+
+		f, err := os.Open("testdata/api_heartbeats_response_extra_heartbeats_filtered.json")
+		require.NoError(t, err)
+
+		defer f.Close()
+
+		_, err = io.Copy(w, f)
+		require.NoError(t, err)
+
+		numCalls++
+	})
+
+	inr, inw, err := os.Pipe()
+	require.NoError(t, err)
+
+	defer func() {
+		inr.Close()
+		inw.Close()
+	}()
+
+	origStdin := os.Stdin
+
+	defer func() { os.Stdin = origStdin }()
+
+	os.Stdin = inr
+
+	data, err := os.ReadFile("testdata/extra_heartbeats_nonexisting_entity.json")
+	require.NoError(t, err)
+
+	go func() {
+		_, err := inw.Write(data)
+		require.NoError(t, err)
+
+		inw.Close()
+	}()
+
+	tmpDir := t.TempDir()
+
+	logFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+
+	defer logFile.Close()
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("api-url", testServerURL)
+	v.Set("entity", "testdata/main.go")
+	v.Set("entity-type", "file")
+	v.Set("hide-branch-names", true)
+	v.Set("projectmap..*", "wakatime-cli")
+	v.Set("extra-heartbeats", true)
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("plugin", plugin)
+	v.Set("time", 1585598059.1)
+	v.Set("log-file", logFile.Name())
+	v.Set("verbose", true)
+
+	logger, err := setup.Logging(ctx, v)
+	require.NoError(t, err)
+
+	defer logger.Flush()
+
+	ctx = log.ToContext(ctx, logger)
+
+	offlineQueueFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(ctx, v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(ctx, v, params, offlineQueueFile.Name(), heartbeats)
+	require.NoError(t, err)
+
+	output, err := io.ReadAll(logFile)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(output), "skipping because of non-existing file")
+}
+
+func TestSendHeartbeats_MissingHeartbeatEntity(t *testing.T) {
+	resetSingleton(t)
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	_, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var numCalls int
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, _ *http.Request) {
+		numCalls++
+
+		w.WriteHeader(http.StatusCreated)
+	})
+
+	v := viper.New()
+	v.Set("offline-queue-file", offlineQueueFile.Name())
+
+	_, err = cmdheartbeat.Run(t.Context(), v)
+	require.Error(t, err)
+
+	assert.EqualError(
+		t,
+		err,
+		"failed to save heartbeats to offline queue: failed to load command parameters: "+
+			"failed to load heartbeat params: failed to retrieve entity",
+	)
+
+	assert.Eventually(t, func() bool { return numCalls == 0 }, time.Second, 50*time.Millisecond)
+}
+
+func TestSendHeartbeats_ErrAuth_UnsetAPIKey(t *testing.T) {
+	resetSingleton(t)
+	t.Setenv("WAKATIME_API_KEY", "")
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	_, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var numCalls int
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, _ *http.Request) {
+		numCalls++
+
+		w.WriteHeader(http.StatusCreated)
+	})
+
+	tmpDir := t.TempDir()
+
+	logFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+
+	defer logFile.Close()
+
+	offlineQueueFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	v := viper.New()
+	v.Set("internal.backoff_at", time.Now().Add(10*time.Minute).Format(ini.DateFormat))
+	v.Set("internal.backoff_retries", "1")
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("entity", "testdata/main.go")
+	v.Set("entity-type", "file")
+	v.Set("log-file", logFile.Name())
+	v.Set("offline-queue-file", offlineQueueFile.Name())
+
+	_, err = cmdheartbeat.Run(t.Context(), v)
+	require.Error(t, err)
+
+	assert.EqualError(
+		t,
+		err,
+		"failed to load heartbeat command parameters: failed to load API parameters: api key not found or empty",
+	)
+
+	assert.Eventually(t, func() bool { return numCalls == 0 }, time.Second, 50*time.Millisecond)
+}
+
+func TestSendHeartbeats_ErrBackoff(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var numCalls int
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, _ *http.Request) {
+		numCalls++
+
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	ctx := t.Context()
+
+	tmpDir := t.TempDir()
+
+	logFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+
+	defer logFile.Close()
+
+	v := viper.New()
+	v.Set("internal.backoff_at", time.Now().Add(10*time.Minute).Format(ini.DateFormat))
+	v.Set("internal.backoff_retries", "1")
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("api-url", testServerURL)
+	v.Set("entity", "testdata/main.go")
+	v.Set("entity-type", "file")
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("log-file", logFile.Name())
+
+	logger, err := setup.Logging(ctx, v)
+	require.NoError(t, err)
+
+	defer logger.Flush()
+
+	ctx = log.ToContext(ctx, logger)
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(ctx, v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(ctx, v, params, offlineQueueFile.Name(), heartbeats)
+	require.ErrorAs(t, err, &api.ErrBackoff{})
+
+	assert.Equal(t, 0, numCalls)
+
+	offlineCount, err := offline.CountHeartbeats(ctx, offlineQueueFile.Name())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, offlineCount)
+
+	output, err := io.ReadAll(logFile)
+	require.NoError(t, err)
+
+	assert.Empty(t, string(output))
+}
+
+func TestSendHeartbeats_ErrBackoff_Verbose(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var numCalls int
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, _ *http.Request) {
+		numCalls++
+
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	ctx := t.Context()
+
+	tmpDir := t.TempDir()
+
+	logFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+
+	defer logFile.Close()
+
+	v := viper.New()
+	v.Set("internal.backoff_at", time.Now().Add(10*time.Minute).Format(ini.DateFormat))
+	v.Set("internal.backoff_retries", "1")
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("api-url", testServerURL)
+	v.Set("entity", "testdata/main.go")
+	v.Set("entity-type", "file")
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("log-file", logFile.Name())
+	v.Set("verbose", true)
+
+	logger, err := setup.Logging(ctx, v)
+	require.NoError(t, err)
+
+	defer logger.Flush()
+
+	ctx = log.ToContext(ctx, logger)
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(ctx, v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(ctx, v, params, offlineQueueFile.Name(), heartbeats)
+	require.Error(t, err)
+	assert.ErrorAs(t, err, &api.ErrBackoff{})
+
+	assert.Equal(t, 0, numCalls)
+
+	offlineCount, err := offline.CountHeartbeats(ctx, offlineQueueFile.Name())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, offlineCount)
+
+	output, err := io.ReadAll(logFile)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(output), "will retry again after")
+}
+
+func TestSendHeartbeats_ObfuscateProject(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var (
+		plugin   = "plugin/0.0.1"
+		numCalls int
+	)
+
+	ctx := t.Context()
+
+	fp := setupTestGitBasic(t)
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, req *http.Request) {
+		// check request
+		assert.Equal(t, http.MethodPost, req.Method)
+		assert.Equal(t, []string{"application/json"}, req.Header["Accept"])
+		assert.Equal(t, []string{"application/json"}, req.Header["Content-Type"])
+		assert.Equal(t, []string{"Basic MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAw"}, req.Header["Authorization"])
+		assert.True(t, strings.HasSuffix(req.Header["User-Agent"][0], plugin), fmt.Sprintf(
+			"%q should have suffix %q",
+			req.Header["User-Agent"][0],
+			plugin,
+		))
+
+		expectedBody, err := os.ReadFile("testdata/api_heartbeats_request_template_obfuscated_project.json")
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+
+		var entity struct {
+			Entity string `json:"entity"`
+		}
+
+		err = json.Unmarshal(body, &[]any{&entity})
+		require.NoError(t, err)
+
+		lines, err := file.ReadLines(ctx, filepath.Join(fp, "wakatime-cli", ".wakatime-project"), 1)
+		require.NoError(t, err)
+
+		expectedBodyStr := fmt.Sprintf(
+			string(expectedBody),
+			entity.Entity,
+			lines[0],
+			heartbeat.UserAgent(ctx, plugin),
+		)
+
+		assert.True(t, strings.HasSuffix(entity.Entity, "src/pkg/file.go"))
+		assert.JSONEq(t, expectedBodyStr, string(body))
+
+		// send response
+		w.WriteHeader(http.StatusCreated)
+
+		f, err := os.Open("testdata/api_heartbeats_response.json")
+		require.NoError(t, err)
+
+		defer f.Close()
+
+		_, err = io.Copy(w, f)
+		require.NoError(t, err)
+
+		numCalls++
+	})
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("api-url", testServerURL)
+	v.Set("category", "debugging")
+	v.Set("cursorpos", 42)
+	v.Set("entity", filepath.Join(fp, "wakatime-cli/src/pkg/file.go"))
+	v.Set("entity-type", "file")
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("language", "Go")
+	v.Set("alternate-language", "Golang")
+	v.Set("hide-project-names", true)
+	v.Set("lineno", 13)
+	v.Set("local-file", "testdata/localfile.go")
+	v.Set("plugin", plugin)
+	v.Set("time", 1585598059.1)
+	v.Set("timeout", 5)
+	v.Set("write", true)
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(ctx, v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(ctx, v, params, offlineQueueFile.Name(), heartbeats)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, numCalls)
+}
+
+func TestSendHeartbeats_ObfuscateProjectNotBranch(t *testing.T) {
+	resetSingleton(t)
+
+	testServerURL, router, tearDown := setupTestServer()
+	defer tearDown()
+
+	var (
+		plugin   = "plugin/0.0.1"
+		numCalls int
+	)
+
+	ctx := t.Context()
+
+	fp := setupTestGitBasic(t)
+
+	router.HandleFunc("/users/current/heartbeats.bulk", func(w http.ResponseWriter, req *http.Request) {
+		// check request
+		assert.Equal(t, http.MethodPost, req.Method)
+		assert.Equal(t, []string{"application/json"}, req.Header["Accept"])
+		assert.Equal(t, []string{"application/json"}, req.Header["Content-Type"])
+		assert.Equal(t, []string{"Basic MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAw"}, req.Header["Authorization"])
+		assert.True(t, strings.HasSuffix(req.Header["User-Agent"][0], plugin), fmt.Sprintf(
+			"%q should have suffix %q",
+			req.Header["User-Agent"][0],
+			plugin,
+		))
+
+		expectedBody, err := os.ReadFile("testdata/api_heartbeats_request_template_obfuscated_project_not_branch.json")
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+
+		var entity struct {
+			Entity string `json:"entity"`
+		}
+
+		err = json.Unmarshal(body, &[]any{&entity})
+		require.NoError(t, err)
+
+		lines, err := file.ReadLines(ctx, filepath.Join(fp, "wakatime-cli", ".wakatime-project"), 1)
+		require.NoError(t, err)
+
+		expectedBodyStr := fmt.Sprintf(string(expectedBody), entity.Entity, lines[0], heartbeat.UserAgent(ctx, plugin))
+
+		assert.True(t, strings.HasSuffix(entity.Entity, "src/pkg/file.go"))
+		assert.JSONEq(t, expectedBodyStr, string(body))
+
+		// send response
+		w.WriteHeader(http.StatusCreated)
+
+		f, err := os.Open("testdata/api_heartbeats_response.json")
+		require.NoError(t, err)
+
+		defer f.Close()
+
+		_, err = io.Copy(w, f)
+		require.NoError(t, err)
+
+		numCalls++
+	})
+
+	v := viper.New()
+	v.SetDefault("sync-offline-activity", 1000)
+	v.Set("api-url", testServerURL)
+	v.Set("category", "debugging")
+	v.Set("cursorpos", 42)
+	v.Set("entity", filepath.Join(fp, "wakatime-cli/src/pkg/file.go"))
+	v.Set("entity-type", "file")
+	v.Set("key", "00000000-0000-4000-8000-000000000000")
+	v.Set("language", "Go")
+	v.Set("alternate-language", "Golang")
+	v.Set("hide-project-names", true)
+	v.Set("hide-branch-names", false)
+	v.Set("lineno", 13)
+	v.Set("local-file", "testdata/localfile.go")
+	v.Set("plugin", plugin)
+	v.Set("time", 1585598059.1)
+	v.Set("timeout", 5)
+	v.Set("write", true)
+
+	offlineQueueFile, err := os.CreateTemp(t.TempDir(), "")
+	require.NoError(t, err)
+
+	defer offlineQueueFile.Close()
+
+	params, heartbeats, err := testLoadParamsAndHeartbeats(ctx, v)
+	require.NoError(t, err)
+
+	err = cmdheartbeat.SendHeartbeats(ctx, v, params, offlineQueueFile.Name(), heartbeats)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, numCalls)
+}
+
+func setupTestServer() (string, *http.ServeMux, func()) {
+	router := http.NewServeMux()
+	srv := httptest.NewServer(router)
+
+	return srv.URL, router, func() { srv.Close() }
+}
+
+func projectRootCountForEntity(entity string) int {
+	return project.CountSlashesInProjectFolder(filepath.Dir(entity))
+}
+
+func heartbeatTemplateArgs(entities []struct {
+	Entity string `json:"entity"`
+}, userAgent string) []any {
+	args := make([]any, 0, len(entities)*3)
+
+	for _, entity := range entities {
+		args = append(args, entity.Entity, projectRootCountForEntity(entity.Entity), userAgent)
+	}
+
+	return args
+}
+
+func padHeartbeatTemplateEntities(template string, entities []struct {
+	Entity string `json:"entity"`
+}) []struct {
+	Entity string `json:"entity"`
+} {
+	total := strings.Count(template, "%d")
+	if len(entities) == 0 || len(entities) >= total {
+		return entities
+	}
+
+	padded := make([]struct {
+		Entity string `json:"entity"`
+	}, total)
+	copy(padded, entities)
+
+	for i := len(entities); i < total; i++ {
+		padded[i] = entities[len(entities)-1]
+	}
+
+	return padded
+}
+
+func assertJSONEqIgnoringProjectRootCount(t *testing.T, expected, actual string) {
+	t.Helper()
+
+	var expectedJSON any
+	require.NoError(t, json.Unmarshal([]byte(expected), &expectedJSON))
+
+	var actualJSON any
+	require.NoError(t, json.Unmarshal([]byte(actual), &actualJSON))
+
+	removeProjectRootCount(expectedJSON)
+	removeProjectRootCount(actualJSON)
+
+	assert.Equal(t, expectedJSON, actualJSON)
+}
+
+func assertJSONPrefixEqIgnoringProjectRootCount(t *testing.T, expected, actual string) {
+	t.Helper()
+
+	var expectedJSON []any
+	require.NoError(t, json.Unmarshal([]byte(expected), &expectedJSON))
+
+	var actualJSON []any
+	require.NoError(t, json.Unmarshal([]byte(actual), &actualJSON))
+	require.GreaterOrEqual(t, len(expectedJSON), len(actualJSON))
+
+	expectedJSON = expectedJSON[:len(actualJSON)]
+
+	removeProjectRootCount(expectedJSON)
+	removeProjectRootCount(actualJSON)
+
+	assert.Equal(t, expectedJSON, actualJSON)
+}
+
+func removeProjectRootCount(v any) {
+	switch vv := v.(type) {
+	case map[string]any:
+		delete(vv, "project_root_count")
+
+		for _, child := range vv {
+			removeProjectRootCount(child)
+		}
+	case []any:
+		for _, child := range vv {
+			removeProjectRootCount(child)
+		}
+	}
+}
+
+func setupTestGitBasic(t *testing.T) (fp string) {
+	tmpDir := t.TempDir()
+
+	tmpDir, err := realpath.Realpath(tmpDir)
+	require.NoError(t, err)
+
+	if runtime.GOOS == "windows" {
+		tmpDir = windows.FormatFilePath(tmpDir)
+	}
+
+	err = os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
+	require.NoError(t, err)
+
+	tmpFile, err := os.Create(filepath.Join(tmpDir, "wakatime-cli/src/pkg/file.go"))
+	require.NoError(t, err)
+
+	defer tmpFile.Close()
+
+	err = os.Mkdir(filepath.Join(tmpDir, "wakatime-cli/.git"), os.FileMode(int(0700)))
+	require.NoError(t, err)
+
+	copyFile(t, "testdata/git_basic/config", filepath.Join(tmpDir, "wakatime-cli/.git/config"))
+	copyFile(t, "testdata/git_basic/HEAD", filepath.Join(tmpDir, "wakatime-cli/.git/HEAD"))
+
+	return tmpDir
+}
+
+func copyFile(t *testing.T, source, destination string) {
+	input, err := os.ReadFile(source)
+	require.NoError(t, err)
+
+	err = os.WriteFile(destination, input, 0600)
+	require.NoError(t, err)
+}
+
+func resetSingleton(t *testing.T) {
+	t.Helper()
+
+	params.Once = sync.Once{}
+}
+
+func testLoadParamsAndHeartbeats(
+	ctx context.Context,
+	v *viper.Viper,
+) (params.Params, []heartbeat.Heartbeat, error) {
+	if !v.IsSet("sync-ai-disable") &&
+		!v.IsSet("sync-ai-disabled") &&
+		!v.IsSet("settings.sync_ai_disabled") {
+		v.Set("sync-ai-disabled", true)
+	}
+
+	apiParams, err := params.LoadAPIParams(ctx, v, params.FlagReadOrderFlagPrecedence)
+	if err != nil {
+		return params.Params{}, nil, fmt.Errorf("failed to load API parameters: %w", err)
+	}
+
+	heartbeatParams, err := params.LoadHeartbeatParams(ctx, v, params.FlagReadOrderFlagPrecedence)
+	if err != nil {
+		return params.Params{}, nil, fmt.Errorf("failed to load heartbeat params: %w", err)
+	}
+
+	aiParams, err := params.LoadAIParams(ctx, v, params.FlagReadOrderFlagPrecedence)
+	if err != nil {
+		return params.Params{}, nil, fmt.Errorf("failed to load ai params: %w", err)
+	}
+
+	loaded := params.Params{
+		AI:        aiParams,
+		API:       apiParams,
+		Heartbeat: heartbeatParams,
+		Offline:   params.LoadOfflineParams(ctx, v, params.FlagReadOrderFlagPrecedence),
+	}
+
+	return loaded, cmdheartbeat.BuildHeartbeats(ctx, apiParams.Plugin, heartbeatParams), nil
+}

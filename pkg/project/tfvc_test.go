@@ -2,7 +2,6 @@ package project_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,14 +18,13 @@ func TestTfvc_Detect(t *testing.T) {
 		t.Skip("Skipping because OS is windows.")
 	}
 
-	fp, tearDown := setupTestTfvc(t, ".tf")
-	defer tearDown()
+	fp := setupTestTfvc(t, ".tf")
 
 	s := project.Tfvc{
 		Filepath: filepath.Join(fp, "wakatime-cli", "src", "pkg", "file.go"),
 	}
 
-	result, detected, err := s.Detect()
+	result, detected, err := s.Detect(t.Context())
 	require.NoError(t, err)
 
 	assert.True(t, detected)
@@ -42,14 +40,13 @@ func TestTfvc_Detect_Windows(t *testing.T) {
 		t.Skip("Skipping because OS is not windows.")
 	}
 
-	fp, tearDown := setupTestTfvc(t, "$tf")
-	defer tearDown()
+	fp := setupTestTfvc(t, "$tf")
 
 	s := project.Tfvc{
 		Filepath: filepath.Join(fp, "wakatime-cli", "src", "pkg", "file.go"),
 	}
 
-	result, detected, err := s.Detect()
+	result, detected, err := s.Detect(t.Context())
 	require.NoError(t, err)
 
 	assert.True(t, detected)
@@ -60,11 +57,16 @@ func TestTfvc_Detect_Windows(t *testing.T) {
 	}, result)
 }
 
-func setupTestTfvc(t *testing.T, tfFolderName string) (fp string, tearDown func()) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "wakatime-tfvc")
-	require.NoError(t, err)
+func TestTfvc_ID(t *testing.T) {
+	s := project.Tfvc{}
 
-	err = os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
+	assert.Equal(t, project.TfvcDetector, s.ID())
+}
+
+func setupTestTfvc(t *testing.T, tfFolderName string) (fp string) {
+	tmpDir := t.TempDir()
+
+	err := os.MkdirAll(filepath.Join(tmpDir, "wakatime-cli/src/pkg"), os.FileMode(int(0700)))
 	require.NoError(t, err)
 
 	err = os.Mkdir(filepath.Join(tmpDir, fmt.Sprintf("wakatime-cli/%s", tfFolderName)), os.FileMode(int(0700)))
@@ -80,5 +82,5 @@ func setupTestTfvc(t *testing.T, tfFolderName string) (fp string, tearDown func(
 
 	defer tmpPropertiesFile.Close()
 
-	return tmpDir, func() { os.RemoveAll(tmpDir) }
+	return tmpDir
 }

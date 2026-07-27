@@ -1,0 +1,19 @@
+[
+	{
+		"ai_line_changes": 123,
+		"cursorpos": 12,
+		"category": "writing tests",
+		"dependencies": ["os"],
+		"entity": "%s",
+		"human_line_changes": 456,
+		"is_write": true,
+		"language": "Go",
+		"lineno": 42,
+		"lines": 100,
+		"project": "%s",
+		"project_root_count": %d,
+		"type": "file",
+		"time": 1585598059,
+		"user_agent": "%s"
+	}
+]

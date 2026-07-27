@@ -1,59 +1,51 @@
 package offline
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
-	"github.com/wakatime/wakatime-cli/pkg/log"
-
 	"github.com/mitchellh/go-homedir"
-	bolt "go.etcd.io/bbolt"
-)
+	"github.com/spf13/viper"
+	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
+	"github.com/wakatime/wakatime-cli/pkg/ini"
+	"github.com/wakatime/wakatime-cli/pkg/log"
+	"github.com/wakatime/wakatime-cli/pkg/vipertools"
 
-const (
-	// SyncMaxDefault is the default maximum number of heartbeats from the
-	// offline queue, which will be synced upon sending heartbeats to the API.
-	SyncMaxDefault = 1000
+	bolt "go.etcd.io/bbolt"
+	bolterrors "go.etcd.io/bbolt/errors"
 )
 
 const (
 	// dbFilename is the default bolt db filename.
-	dbFilename = ".wakatime.bdb"
+	dbFilename = "offline_heartbeats.bdb"
 	// dbBucket is the standard bolt db bucket name.
 	dbBucket = "heartbeats"
 	// maxRequeueAttempts defines the maximum number of attempts to requeue heartbeats,
 	// which could not successfully be sent to the WakaTime API.
 	maxRequeueAttempts = 3
-	// sendLimit is the maximum number of heartbeats, which will be sent at once
+	// PrintMaxDefault is the default maximum number of heartbeats to print.
+	PrintMaxDefault = 10
+	// RateLimitDefaultSeconds is the default seconds between sending heartbeats
+	// to the API. If not enough time has passed, heartbeats are saved to the offline queue.
+	RateLimitDefaultSeconds = 120
+	// SendLimit is the maximum number of heartbeats, which will be sent at once
 	// to the WakaTime API.
-	sendLimit = 24
+	SendLimit = 10
+	// SyncMaxDefault is the default maximum number of heartbeats from the
+	// offline queue, which will be synced upon sending heartbeats to the API.
+	SyncMaxDefault = 1000
+	// readDedupeWindowSeconds defines the max distance between two heartbeats
+	// for the same entity to be considered duplicates during read cleanup.
+	readDedupeWindowSeconds = 1
 )
-
-// QueueFilepath returns the path for offline queue db file.
-func QueueFilepath() (string, error) {
-	home, exists := os.LookupEnv("WAKATIME_HOME")
-	if exists && home != "" {
-		p, err := homedir.Expand(home)
-		if err != nil {
-			return "", fmt.Errorf("failed parsing WAKATIME_HOME environment variable: %s", err)
-		}
-
-		return filepath.Join(p, dbFilename), nil
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed getting user's home directory: %s", err)
-	}
-
-	return filepath.Join(home, dbFilename), nil
-}
 
 // WithQueue initializes and returns a heartbeat handle option, which can be
 // used in a heartbeat processing pipeline for automatic handling of failures
@@ -61,48 +53,91 @@ func QueueFilepath() (string, error) {
 // failing connection to API, failed sending or errors returned by API, the
 // heartbeats will be temporarily stored in a DB and sending will be retried
 // at next usages of the wakatime cli.
-func WithQueue(filepath string, syncLimit int) (heartbeat.HandleOption, error) {
+func WithQueue(filepath string) heartbeat.HandleOption {
 	return func(next heartbeat.Handle) heartbeat.Handle {
-		return func(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
-			log.Debugf("execute offline queue with file %s", filepath)
+		return func(ctx context.Context, hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+			logger := log.Extract(ctx)
+			// logger.Debugf("execute offline queue with file %s", filepath)
 
 			if len(hh) == 0 {
-				log.Debugln("abort execution, as there are no heartbeats ready for sending")
+				logger.Debugln("abort execution, as there are no heartbeats ready for sending")
 
 				return nil, nil
 			}
 
-			results, err := next(hh)
+			results, err := next(ctx, hh)
 			if err != nil {
-				log.Debugf("pushing %d heartbeat(s) to queue due to error", len(hh))
+				logger.Debugf("pushing %d heartbeat(s) to queue after error: %s", len(hh), err)
 
-				requeueErr := pushHeartbeatsWithRetry(filepath, hh)
+				requeueErr := pushHeartbeatsWithRetry(ctx, filepath, hh)
 				if requeueErr != nil {
-					log.Errorf("failed to push heatbeats to queue after api error: %s", requeueErr)
+					return nil, fmt.Errorf(
+						"failed to push heartbeats to queue: %w",
+						requeueErr,
+					)
 				}
 
 				return nil, err
 			}
 
-			err = handleResults(filepath, results, hh)
+			_, err = handleResults(ctx, filepath, results, hh)
 			if err != nil {
-				return nil, fmt.Errorf("failed to handle results: %s", err)
+				return nil, fmt.Errorf("failed to handle results: %w", err)
 			}
 
 			return results, nil
 		}
-	}, nil
+	}
+}
+
+// QueueFilepath returns the path for offline queue db file. If
+// the resource directory cannot be detected, it defaults to the
+// current directory.
+func QueueFilepath(ctx context.Context, v *viper.Viper) (string, error) {
+	paramFile := vipertools.GetString(v, "offline-queue-file")
+	if paramFile != "" {
+		p, err := homedir.Expand(paramFile)
+		if err != nil {
+			return "", fmt.Errorf("failed expanding offline-queue-file param: %s", err)
+		}
+
+		return p, nil
+	}
+
+	folder, err := ini.WakaResourcesDir(ctx)
+	if err != nil {
+		return dbFilename, fmt.Errorf("failed getting resource directory, defaulting to current directory: %s", err)
+	}
+
+	return filepath.Join(folder, dbFilename), nil
+}
+
+// WithSync initializes and returns a heartbeat handle option, which
+// can be used in a heartbeat processing pipeline to pop heartbeats
+// from offline queue and send the heartbeats to WakaTime API.
+func WithSync(filepath string, syncLimit int) heartbeat.HandleOption {
+	return func(next heartbeat.Handle) heartbeat.Handle {
+		return func(ctx context.Context, _ []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+			// logger.Debugf("execute offline sync with file %s", filepath)
+			err := Sync(ctx, filepath, syncLimit)(next)
+			if err != nil {
+				return nil, fmt.Errorf("failed to sync offline heartbeats: %w", err)
+			}
+
+			return nil, nil
+		}
+	}
 }
 
 // Sync returns a function to send queued heartbeats to the WakaTime API.
-func Sync(filepath string, syncLimit int) func(next heartbeat.Handle) error {
+func Sync(ctx context.Context, filepath string, syncLimit int) func(next heartbeat.Handle) error {
 	return func(next heartbeat.Handle) error {
-		log.Debugf("execute offline sync with file %s", filepath)
-
 		var (
 			alreadySent int
 			run         int
 		)
+
+		logger := log.Extract(ctx)
 
 		for {
 			run++
@@ -111,148 +146,223 @@ func Sync(filepath string, syncLimit int) func(next heartbeat.Handle) error {
 				break
 			}
 
-			var num = sendLimit
+			var num = SendLimit
 
-			if alreadySent+sendLimit > syncLimit {
+			if alreadySent+SendLimit > syncLimit {
 				num = syncLimit - alreadySent
 				alreadySent += num
 			}
 
-			hh, err := popHeartbeats(filepath, num)
+			hh, err := popHeartbeats(ctx, filepath, num)
 			if err != nil {
-				return fmt.Errorf("failed to fetch heartbeat from offline queue: %s", err)
+				return fmt.Errorf("failed to fetch heartbeat from offline queue: %w", err)
 			}
 
 			if len(hh) == 0 {
-				log.Debugln("no queued heartbeats ready for sending")
+				logger.Debugln("no queued heartbeats ready for sending")
 
 				break
 			}
 
-			log.Debugf("send %d heartbeats on sync run %d", len(hh), run)
+			logger.Debugf("send %d heartbeats on sync run %d", len(hh), run)
 
-			results, err := next(hh)
+			results, err := next(ctx, hh)
 			if err != nil {
-				requeueErr := pushHeartbeatsWithRetry(filepath, hh)
+				requeueErr := pushHeartbeatsWithRetry(ctx, filepath, hh)
 				if requeueErr != nil {
-					log.Warnf("failed to push heatbeats to queue after api error: %s", requeueErr)
+					logger.Warnf("failed to push heartbeats to queue after api error: %s", requeueErr)
 				}
 
 				return err
 			}
 
-			err = handleResults(filepath, results, hh)
+			stopSending, err := handleResults(ctx, filepath, results, hh)
 			if err != nil {
-				return fmt.Errorf("failed to handle heatbeats api results: %s", err)
+				return fmt.Errorf("failed to handle heartbeats api results: %w", err)
 			}
+
+			if stopSending {
+				break
+			}
+
+			alreadySent += len(hh)
 		}
 
 		return nil
 	}
 }
 
-func handleResults(filepath string, results []heartbeat.Result, hh []heartbeat.Heartbeat) error {
+func handleResults(
+	ctx context.Context,
+	filepath string,
+	results []heartbeat.Result,
+	hh []heartbeat.Heartbeat,
+) (bool, error) {
 	var (
 		err               error
 		withInvalidStatus []heartbeat.Heartbeat
+		stopSending       bool
 	)
+
+	logger := log.Extract(ctx)
+
+	if len(results) < len(hh) {
+		logger.Warnf("expected %d results from api but received %d", len(hh), len(results))
+	}
+
+	handled := make(map[string]int, len(results))
 
 	// push heartbeats with invalid result status codes to queue
 	for n, result := range results {
-		if n >= len(hh) {
-			log.Warnln("results from api not matching heartbeats sent")
+		h, ok := resultHeartbeat(result, hh, n)
+		if !ok {
+			stopSending = true
+
 			break
 		}
 
+		handled[h.ID()]++
+
 		if result.Status == http.StatusBadRequest {
-			serialized, jsonErr := json.Marshal(result.Heartbeat)
+			serialized, jsonErr := json.Marshal(h)
 			if jsonErr != nil {
-				log.Warnf(
+				logger.Warnf(
 					"failed to json marshal heartbeat: %s. heartbeat: %#v",
 					jsonErr,
-					result.Heartbeat,
+					h,
 				)
 			}
 
-			log.Debugf("heartbeat result status bad request: %s", string(serialized))
+			logger.Debugf("heartbeat result status bad request: %s", string(serialized))
 
 			continue
 		}
 
-		if result.Status != http.StatusCreated &&
-			result.Status != http.StatusAccepted {
-			withInvalidStatus = append(withInvalidStatus, hh[n])
+		if result.Status < http.StatusOK || result.Status > 299 {
+			withInvalidStatus = append(withInvalidStatus, h)
+
+			logger.Debugf("heartbeat %d has invalid status code %d: %s", n, result.Status, strings.Join(result.Errors, ", "))
 		}
 	}
 
 	if len(withInvalidStatus) > 0 {
-		log.Debugf("pushing %d heartbeat(s) with invalid result to queue", len(withInvalidStatus))
+		logger.Debugf("pushing %d heartbeat(s) with invalid result to queue", len(withInvalidStatus))
 
-		err = pushHeartbeatsWithRetry(filepath, withInvalidStatus)
+		stopSending = true
+
+		err = pushHeartbeatsWithRetry(ctx, filepath, withInvalidStatus)
 		if err != nil {
-			log.Warnf("failed to push heatbeats with invalid status to queue: %s", err)
+			logger.Warnf("failed to push heartbeats with invalid status to queue: %s", err)
 		}
 	}
 
 	// handle leftover heartbeats
-	leftovers := len(hh) - len(results)
-	if leftovers > 0 {
-		log.Warnf("missing %d results from api.", leftovers)
+	leftovers := missingResultHeartbeats(hh, handled)
+	if len(leftovers) > 0 {
+		logger.Warnf("missing %d results from api.", len(leftovers))
 
-		start := len(hh) - leftovers
-
-		err = pushHeartbeatsWithRetry(filepath, hh[start:])
+		err = pushHeartbeatsWithRetry(ctx, filepath, leftovers)
 		if err != nil {
-			log.Warnf("failed to push leftover heatbeats to queue: %s", err)
+			logger.Warnf("failed to push leftover heartbeats to queue: %s", err)
 		}
 	}
 
-	return err
+	return err != nil && !stopSending, err
 }
 
-func popHeartbeats(filepath string, limit int) ([]heartbeat.Heartbeat, error) {
-	db, err := bolt.Open(filepath, 0600, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open db connection: %s", err)
+func resultHeartbeat(result heartbeat.Result, hh []heartbeat.Heartbeat, n int) (heartbeat.Heartbeat, bool) {
+	if result.Heartbeat.Entity != "" || result.Heartbeat.Time != 0 {
+		return result.Heartbeat, true
 	}
 
-	defer db.Close()
+	if n >= len(hh) {
+		return heartbeat.Heartbeat{}, false
+	}
+
+	return hh[n], true
+}
+
+func missingResultHeartbeats(hh []heartbeat.Heartbeat, handled map[string]int) []heartbeat.Heartbeat {
+	var missing []heartbeat.Heartbeat
+
+	for _, h := range hh {
+		id := h.ID()
+		if handled[id] > 0 {
+			handled[id]--
+			continue
+		}
+
+		missing = append(missing, h)
+	}
+
+	return missing
+}
+
+func popHeartbeats(ctx context.Context, filepath string, limit int) (queued []heartbeat.Heartbeat, err error) {
+	defer func() {
+		recoverDBPanic(filepath, &err, recover())
+	}()
+
+	db, close, err := openDB(ctx, filepath)
+	if err != nil {
+		return nil, err
+	}
+
+	defer close()
+
+	logger := log.Extract(ctx)
 
 	tx, err := db.Begin(true)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start db transaction: %s", err)
+		return nil, fmt.Errorf("failed to start db transaction: %w", err)
 	}
+
+	defer func() {
+		if tx == nil {
+			return
+		}
+
+		if err := tx.Rollback(); err != nil {
+			logger.Errorf("failed to rollback transaction: %s", err)
+		}
+	}()
 
 	queue := NewQueue(tx)
 
-	queued, err := queue.PopMany(limit)
+	_, err = queue.DeleteDuplicates()
 	if err != nil {
-		errrb := tx.Rollback()
-		if errrb != nil {
-			log.Errorf("failed to rollback transaction: %s", errrb)
-		}
+		logger.Errorf("failed to delete duplicate offline heartbeats: %s", err)
 
-		return nil, fmt.Errorf("failed to pop heartbeat(s) from queue: %s", err)
+		return nil, err
+	}
+
+	queued, err = queue.PopMany(limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pop heartbeat(s) from queue: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit db transaction: %s", err)
+		return nil, fmt.Errorf("failed to commit db transaction: %w", err)
 	}
+
+	tx = nil
 
 	return queued, nil
 }
 
-func pushHeartbeatsWithRetry(filepath string, hh []heartbeat.Heartbeat) error {
+func pushHeartbeatsWithRetry(ctx context.Context, filepath string, hh []heartbeat.Heartbeat) error {
 	var (
 		count int
 		err   error
 	)
 
+	logger := log.Extract(ctx)
+
 	for {
 		if count >= maxRequeueAttempts {
 			serialized, jsonErr := json.Marshal(hh)
 			if jsonErr != nil {
-				log.Warnf("failed to json marshal heartbeats: %s. heartbeats: %#v", jsonErr, hh)
+				logger.Warnf("failed to json marshal heartbeats: %s. heartbeats: %#v", jsonErr, hh)
 			}
 
 			return fmt.Errorf(
@@ -263,9 +373,16 @@ func pushHeartbeatsWithRetry(filepath string, hh []heartbeat.Heartbeat) error {
 			)
 		}
 
-		err = pushHeartbeats(filepath, hh)
+		err = pushHeartbeats(ctx, filepath, hh)
 		if err != nil {
 			count++
+
+			var erropen ErrOpenDB
+			if errors.As(err, &erropen) && erropen.Reset {
+				logger.Warnf("offline db was reset after corruption: %s", erropen)
+
+				continue
+			}
 
 			sleepSeconds := math.Pow(2, float64(count))
 
@@ -280,64 +397,210 @@ func pushHeartbeatsWithRetry(filepath string, hh []heartbeat.Heartbeat) error {
 	return nil
 }
 
-func pushHeartbeats(filepath string, hh []heartbeat.Heartbeat) error {
-	db, err := bolt.Open(filepath, 0600, nil)
+func pushHeartbeats(ctx context.Context, filepath string, hh []heartbeat.Heartbeat) (err error) {
+	defer func() {
+		recoverDBPanic(filepath, &err, recover())
+	}()
+
+	db, close, err := openDB(ctx, filepath)
 	if err != nil {
-		return fmt.Errorf("failed to open db connection: %s", err)
+		return err
 	}
 
-	defer db.Close()
+	defer close()
+
+	logger := log.Extract(ctx)
 
 	tx, err := db.Begin(true)
 	if err != nil {
-		return fmt.Errorf("failed to start db transaction: %s", err)
+		return fmt.Errorf("failed to start db transaction: %w", err)
 	}
+
+	defer func() {
+		if tx == nil {
+			return
+		}
+
+		if err := tx.Rollback(); err != nil {
+			logger.Errorf("failed to rollback transaction: %s", err)
+		}
+	}()
 
 	queue := NewQueue(tx)
 
 	err = queue.PushMany(hh)
 	if err != nil {
-		return fmt.Errorf("failed to push heartbeat(s) to queue: %s", err)
+		return fmt.Errorf("failed to push heartbeat(s) to queue: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit db transaction: %s", err)
+		return fmt.Errorf("failed to commit db transaction: %w", err)
 	}
+
+	tx = nil
 
 	return nil
 }
 
 // CountHeartbeats returns the total number of heartbeats in the offline db.
-func CountHeartbeats(filepath string) (int, error) {
-	db, err := bolt.Open(filepath, 0600, nil)
+func CountHeartbeats(ctx context.Context, filepath string) (count int, err error) {
+	defer func() {
+		recoverDBPanic(filepath, &err, recover())
+	}()
+
+	db, close, err := openDB(ctx, filepath)
 	if err != nil {
-		return 0, fmt.Errorf("failed to open db connection: %s", err)
+		return 0, err
 	}
 
-	defer db.Close()
+	defer close()
 
 	tx, err := db.Begin(true)
 	if err != nil {
-		return 0, fmt.Errorf("failed to start db transaction: %s", err)
+		return 0, fmt.Errorf("failed to start db transaction: %w", err)
 	}
+
+	logger := log.Extract(ctx)
+
+	defer func() {
+		err := tx.Rollback()
+		if err != nil {
+			logger.Errorf("failed to rollback transaction: %s", err)
+		}
+	}()
 
 	queue := NewQueue(tx)
 
-	count, err := queue.Count()
+	count, err = queue.Count()
 	if err != nil {
-		log.Errorf("failed to count offline heartbeats: %s", err)
-
-		_ = tx.Rollback()
-
-		return count, err
-	}
-
-	err = tx.Rollback()
-	if err != nil {
-		log.Warnf("failed to rollback transaction: %s", err)
+		return 0, fmt.Errorf("failed to count heartbeats: %w", err)
 	}
 
 	return count, nil
+}
+
+// ReadHeartbeats reads the informed heartbeats in the offline db.
+func ReadHeartbeats(ctx context.Context, filepath string, limit int) (hh []heartbeat.Heartbeat, err error) {
+	defer func() {
+		recoverDBPanic(filepath, &err, recover())
+	}()
+
+	db, close, err := openDB(ctx, filepath)
+	if err != nil {
+		return nil, err
+	}
+
+	defer close()
+
+	tx, err := db.Begin(true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start db transaction: %w", err)
+	}
+
+	queue := NewQueue(tx)
+	logger := log.Extract(ctx)
+
+	defer func() {
+		if tx == nil {
+			return
+		}
+
+		if err := tx.Rollback(); err != nil {
+			logger.Warnf("failed to rollback transaction: %s", err)
+		}
+	}()
+
+	hh, err = queue.ReadMany(limit)
+	if err != nil {
+		logger.Errorf("failed to read offline heartbeats: %s", err)
+
+		return nil, err
+	}
+
+	return hh, nil
+}
+
+func recoverDBPanic(dbFilepath string, err *error, recovered any) {
+	if recovered != nil {
+		*err = resetCorruptDBError(dbFilepath, fmt.Errorf("panicked: %v", recovered))
+	}
+}
+
+// openDB opens a connection to the offline db.
+// It returns the pointer to bolt.DB, a function to close the connection and an error.
+// Although named parameters should be avoided, this func uses them to access inside the deferred function and set an error.
+func openDB(ctx context.Context, filepath string) (db *bolt.DB, _ func(), err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = resetCorruptDBError(filepath, fmt.Errorf("panicked: %v", r))
+		}
+	}()
+
+	db, err = bolt.Open(filepath, 0644, &bolt.Options{Timeout: 30 * time.Second})
+	if err != nil {
+		if isCorruptDBError(err) {
+			return nil, nil, resetCorruptDBError(filepath, fmt.Errorf("failed to open db file: %w", err))
+		}
+
+		return nil, nil, fmt.Errorf("failed to open db file: %w", err)
+	}
+
+	return db, func() {
+		logger := log.Extract(ctx)
+
+		// recover from panic when closing db
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Warnf("panicked: failed to close db file: %v", r)
+			}
+		}()
+
+		if err := db.Close(); err != nil {
+			logger.Debugf("failed to close db file: %s", err)
+		}
+	}, err
+}
+
+func isCorruptDBError(err error) bool {
+	return errors.Is(err, bolterrors.ErrInvalid) ||
+		errors.Is(err, bolterrors.ErrVersionMismatch) ||
+		errors.Is(err, bolterrors.ErrChecksum)
+}
+
+func resetCorruptDBError(dbFilepath string, cause error) ErrOpenDB {
+	backupFilepath, err := resetCorruptDB(dbFilepath)
+	if err != nil {
+		return ErrOpenDB{Err: fmt.Errorf("%w; failed to move corrupt db file: %v", cause, err)}
+	}
+
+	if backupFilepath == "" {
+		return ErrOpenDB{Err: fmt.Errorf("%w; corrupt db file already removed", cause), Reset: true}
+	}
+
+	return ErrOpenDB{
+		Err:            fmt.Errorf("%w; moved corrupt db file to %q", cause, backupFilepath),
+		BackupFilepath: backupFilepath,
+		Reset:          true,
+	}
+}
+
+func resetCorruptDB(dbFilepath string) (string, error) {
+	backupFilepath := fmt.Sprintf(
+		"%s.corrupt.%s",
+		dbFilepath,
+		time.Now().UTC().Format("20060102T150405.000000000Z"),
+	)
+
+	err := os.Rename(dbFilepath, backupFilepath)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	return backupFilepath, nil
 }
 
 // Queue is a db client to temporarily store heartbeats in bolt db, in case heartbeat
@@ -356,17 +619,88 @@ func NewQueue(tx *bolt.Tx) *Queue {
 	}
 }
 
-// PopMany retrieves heartbeats with the specified ids from db.
+// Count returns the total number of heartbeats in the offline db.
+func (q *Queue) Count() (int, error) {
+	b, err := q.tx.CreateBucketIfNotExists([]byte(q.Bucket))
+	if err != nil {
+		return 0, fmt.Errorf("failed to create/load bucket: %w", err)
+	}
+
+	return b.Stats().KeyN, nil
+}
+
+// PopMany retrieves and deletes up to limit heartbeats from db, newest first.
 func (q *Queue) PopMany(limit int) ([]heartbeat.Heartbeat, error) {
 	b, err := q.tx.CreateBucketIfNotExists([]byte(q.Bucket))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create/load bucket: %s", err)
+		return nil, fmt.Errorf("failed to create/load bucket: %w", err)
 	}
 
 	var (
 		heartbeats []heartbeat.Heartbeat
 		ids        []string
 	)
+
+	// load values
+	c := b.Cursor()
+
+	// Heartbeat ids are prefixed with their timestamp, so reverse key order is
+	// descending heartbeat timestamp order.
+	for key, value := c.Last(); key != nil; key, value = c.Prev() {
+		if len(heartbeats) >= limit {
+			break
+		}
+
+		var h heartbeat.Heartbeat
+
+		err := json.Unmarshal(value, &h)
+		if err != nil {
+			return nil, fmt.Errorf("failed to json unmarshal heartbeat data: %w", err)
+		}
+
+		heartbeats = append(heartbeats, h)
+		ids = append(ids, string(key))
+	}
+
+	for _, id := range ids {
+		if err := b.Delete([]byte(id)); err != nil {
+			return nil, fmt.Errorf("failed to delete key %q: %w", id, err)
+		}
+	}
+
+	return heartbeats, nil
+}
+
+// PushMany stores the provided heartbeats in the db.
+func (q *Queue) PushMany(hh []heartbeat.Heartbeat) error {
+	b, err := q.tx.CreateBucketIfNotExists([]byte(q.Bucket))
+	if err != nil {
+		return fmt.Errorf("failed to create/load bucket: %w", err)
+	}
+
+	for _, h := range hh {
+		data, err := json.Marshal(h)
+		if err != nil {
+			return fmt.Errorf("failed to json marshal heartbeat: %w", err)
+		}
+
+		err = b.Put([]byte(h.ID()), data)
+		if err != nil {
+			return fmt.Errorf("failed to store heartbeat with id %q: %w", h.ID(), err)
+		}
+	}
+
+	return nil
+}
+
+// ReadMany reads heartbeats from db without deleting them.
+func (q *Queue) ReadMany(limit int) ([]heartbeat.Heartbeat, error) {
+	b, err := q.tx.CreateBucketIfNotExists([]byte(q.Bucket))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create/load bucket: %w", err)
+	}
+
+	var heartbeats = make([]heartbeat.Heartbeat, 0)
 
 	// load values
 	c := b.Cursor()
@@ -380,50 +714,55 @@ func (q *Queue) PopMany(limit int) ([]heartbeat.Heartbeat, error) {
 
 		err := json.Unmarshal(value, &h)
 		if err != nil {
-			return nil, fmt.Errorf("failed to json unmarshal heartbeat data: %s", err)
+			return nil, fmt.Errorf("failed to json unmarshal heartbeat data: %w", err)
 		}
 
 		heartbeats = append(heartbeats, h)
-		ids = append(ids, string(key))
-	}
-
-	for _, id := range ids {
-		if err := b.Delete([]byte(id)); err != nil {
-			return nil, fmt.Errorf("failed to delete key %q: %s", id, err)
-		}
 	}
 
 	return heartbeats, nil
 }
 
-// PushMany stores the provided heartbeats in the db.
-func (q *Queue) PushMany(hh []heartbeat.Heartbeat) error {
+// DeleteDuplicates cleanups and deletes duplicate heartbeats from the offline db.
+func (q *Queue) DeleteDuplicates() (int, error) {
 	b, err := q.tx.CreateBucketIfNotExists([]byte(q.Bucket))
 	if err != nil {
-		return fmt.Errorf("failed to create/load bucket: %s", err)
+		return 0, fmt.Errorf("failed to create/load bucket: %w", err)
 	}
 
-	for _, h := range hh {
-		data, err := json.Marshal(h)
+	kept := make(map[string][]float64)
+	deleted := 0
+
+	c := b.Cursor()
+	for key, value := c.First(); key != nil; key, value = c.Next() {
+		var h heartbeat.Heartbeat
+
+		err := json.Unmarshal(value, &h)
 		if err != nil {
-			return fmt.Errorf("failed to json marshal heartbeat: %s", err)
+			return 0, fmt.Errorf("failed to json unmarshal heartbeat data: %w", err)
 		}
 
-		err = b.Put([]byte(h.ID()), data)
-		if err != nil {
-			return fmt.Errorf("failed to store heartbeat with id %q: %s", h.ID(), err)
+		isDuplicate := false
+
+		for _, keptTime := range kept[h.Entity] {
+			if math.Abs(h.Time-keptTime) <= readDedupeWindowSeconds {
+				isDuplicate = true
+				break
+			}
 		}
+
+		if isDuplicate {
+			if err := c.Delete(); err != nil {
+				return 0, fmt.Errorf("failed to delete duplicate heartbeat with key %q: %w", string(key), err)
+			}
+
+			deleted++
+
+			continue
+		}
+
+		kept[h.Entity] = append(kept[h.Entity], h.Time)
 	}
 
-	return nil
-}
-
-// Count returns the total number of heartbeats in the offline db.
-func (q *Queue) Count() (int, error) {
-	b, err := q.tx.CreateBucketIfNotExists([]byte(q.Bucket))
-	if err != nil {
-		return 0, fmt.Errorf("failed to create/load bucket: %s", err)
-	}
-
-	return b.Stats().KeyN, nil
+	return deleted, nil
 }

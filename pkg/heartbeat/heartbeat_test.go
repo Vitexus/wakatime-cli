@@ -1,9 +1,10 @@
 package heartbeat_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -19,17 +20,24 @@ import (
 
 func TestNew(t *testing.T) {
 	h := heartbeat.New(
-		heartbeat.CodingCategory,
-		heartbeat.Int(12),
+		heartbeat.PointerTo(5),
+		"feature/branch",
+		heartbeat.CodingCategory.String(),
+		heartbeat.PointerTo(12),
 		"testdata/main.go",
 		heartbeat.FileType,
-		heartbeat.Bool(true),
-		heartbeat.String("Go"),
+		heartbeat.PointerTo(2),
+		true,
+		heartbeat.PointerTo(true),
+		heartbeat.PointerTo("Go"),
 		"Golang",
-		heartbeat.Int(42),
+		heartbeat.PointerTo(42),
+		heartbeat.PointerTo(100),
 		"/path/to/file",
 		"billing",
+		false,
 		"pci",
+		"/custom-path",
 		1592868313.541149,
 		"wakatime/13.0.7",
 	)
@@ -37,112 +45,119 @@ func TestNew(t *testing.T) {
 	assert.True(t, strings.HasSuffix(h.Entity, "testdata/main.go"))
 
 	assert.Equal(t, heartbeat.Heartbeat{
-		Category:          heartbeat.CodingCategory,
-		CursorPosition:    heartbeat.Int(12),
-		EntityType:        heartbeat.FileType,
-		IsWrite:           heartbeat.Bool(true),
-		Language:          heartbeat.String("Go"),
-		LanguageAlternate: "Golang",
-		LineNumber:        heartbeat.Int(42),
-		LocalFile:         "/path/to/file",
-		ProjectAlternate:  "billing",
-		ProjectOverride:   "pci",
-		Time:              1592868313.541149,
-		UserAgent:         "wakatime/13.0.7",
-		Entity:            h.Entity,
+		AILineChanges:       heartbeat.PointerTo(5),
+		BranchAlternate:     "feature/branch",
+		Category:            heartbeat.CodingCategory.String(),
+		CursorPosition:      heartbeat.PointerTo(12),
+		EntityType:          heartbeat.FileType,
+		HumanLineChanges:    heartbeat.PointerTo(2),
+		IsUnsavedEntity:     true,
+		IsWrite:             heartbeat.PointerTo(true),
+		Language:            heartbeat.PointerTo("Go"),
+		LanguageAlternate:   "Golang",
+		LineNumber:          heartbeat.PointerTo(42),
+		Lines:               heartbeat.PointerTo(100),
+		LocalFile:           "/path/to/file",
+		ProjectAlternate:    "billing",
+		ProjectOverride:     "pci",
+		ProjectPathOverride: "/custom-path",
+		Time:                1592868313.541149,
+		UserAgent:           "wakatime/13.0.7",
+		Entity:              h.Entity,
 	}, h)
 }
 
-func TestNew_Windows(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Skipping because the OS is not windows.")
-	}
-
-	h := heartbeat.New(
-		heartbeat.CodingCategory,
-		heartbeat.Int(12),
-		`testdata\\main.go`,
+func TestNewWithAITokens(t *testing.T) {
+	h := heartbeat.NewWithAITokens(
+		heartbeat.PointerTo(5),
+		"session-1",
+		heartbeat.AITokens{
+			LastInput:     10,
+			LastOutput:    20,
+			CurrentInput:  7,
+			CurrentOutput: 25,
+		},
+		"feature/branch",
+		heartbeat.AICodingCategory.String(),
+		heartbeat.PointerTo(12),
+		"testdata/main.go",
 		heartbeat.FileType,
-		heartbeat.Bool(true),
-		heartbeat.String("Go"),
+		heartbeat.PointerTo(2),
+		false,
+		heartbeat.PointerTo(true),
+		heartbeat.PointerTo("Go"),
 		"Golang",
-		heartbeat.Int(42),
+		heartbeat.PointerTo(42),
+		heartbeat.PointerTo(100),
 		"/path/to/file",
 		"billing",
+		true,
 		"pci",
+		"/custom-path",
 		1592868313.541149,
 		"wakatime/13.0.7",
 	)
 
-	assert.True(t, strings.HasSuffix(h.Entity, "testdata/main.go"))
-
-	assert.Equal(t, heartbeat.Heartbeat{
-		Category:          heartbeat.CodingCategory,
-		CursorPosition:    heartbeat.Int(12),
-		EntityType:        heartbeat.FileType,
-		IsWrite:           heartbeat.Bool(true),
-		Language:          heartbeat.String("Go"),
-		LanguageAlternate: "Golang",
-		LineNumber:        heartbeat.Int(42),
-		LocalFile:         "/path/to/file",
-		ProjectAlternate:  "billing",
-		ProjectOverride:   "pci",
-		Time:              1592868313.541149,
-		UserAgent:         "wakatime/13.0.7",
-		Entity:            h.Entity,
-	}, h)
+	assert.Equal(t, "session-1", h.AISession)
+	assert.Zero(t, h.AIInputTokens)
+	assert.Equal(t, int64(5), h.AIOutputTokens)
+	assert.Equal(t, heartbeat.AICodingCategory.String(), h.Category)
+	assert.Equal(t, "testdata/main.go", h.Entity)
+	assert.True(t, h.ProjectFromGitRemote)
 }
 
 func TestHeartbeat_ID(t *testing.T) {
 	h := heartbeat.Heartbeat{
-		Branch:     heartbeat.String("heartbeat"),
-		Category:   heartbeat.CodingCategory,
-		Entity:     "/tmp/main.go",
-		EntityType: heartbeat.FileType,
-		IsWrite:    heartbeat.Bool(true),
-		Project:    heartbeat.String("wakatime"),
-		Time:       1592868313.541149,
+		Branch:         heartbeat.PointerTo("heartbeat"),
+		Category:       heartbeat.CodingCategory.String(),
+		CursorPosition: heartbeat.PointerTo(42),
+		Entity:         "/tmp/main.go",
+		EntityType:     heartbeat.FileType,
+		IsWrite:        heartbeat.PointerTo(true),
+		Project:        heartbeat.PointerTo("wakatime"),
+		Time:           1592868313.541149,
 	}
-	assert.Equal(t, "1592868313.541149-file-coding-wakatime-heartbeat-/tmp/main.go-true", h.ID())
+	assert.Equal(t, "1592868313.541149-42-file-coding-wakatime-heartbeat-/tmp/main.go-true", h.ID())
 }
 
 func TestHeartbeat_ID_NilFields(t *testing.T) {
 	h := heartbeat.Heartbeat{
-		Category:   heartbeat.CodingCategory,
 		Entity:     "/tmp/main.go",
 		EntityType: heartbeat.FileType,
 		Time:       1592868313.541149,
 	}
-	assert.Equal(t, "1592868313.541149-file-coding---/tmp/main.go-false", h.ID())
+	assert.Equal(t, "1592868313.541149-nil-file-undefined-unset-unset-/tmp/main.go-false", h.ID())
 }
 
 func TestHeartbeat_JSON(t *testing.T) {
 	h := heartbeat.Heartbeat{
-		Branch:            heartbeat.String("heartbeat"),
-		Category:          heartbeat.CodingCategory,
-		CursorPosition:    heartbeat.Int(12),
-		Dependencies:      []string{"dep1", "dep2"},
-		Entity:            "/tmp/main.go",
-		EntityType:        heartbeat.FileType,
-		IsWrite:           heartbeat.Bool(true),
-		Language:          heartbeat.String("Go"),
-		LanguageAlternate: "Golang",
-		LineNumber:        heartbeat.Int(42),
-		Lines:             heartbeat.Int(100),
-		Project:           heartbeat.String("wakatime"),
-		Time:              1585598060.1,
-		UserAgent:         "wakatime/13.0.7",
+		AILineChanges:      heartbeat.PointerTo(5),
+		AISubscriptionPlan: "plus",
+		Branch:             heartbeat.PointerTo("heartbeat"),
+		Category:           heartbeat.DebuggingCategory.String(),
+		CursorPosition:     heartbeat.PointerTo(12),
+		Dependencies:       []string{"dep1", "dep2"},
+		Entity:             "/tmp/main.go",
+		EntityType:         heartbeat.FileType,
+		HumanLineChanges:   heartbeat.PointerTo(2),
+		IsWrite:            heartbeat.PointerTo(true),
+		Language:           heartbeat.PointerTo("Go"),
+		LineNumber:         heartbeat.PointerTo(42),
+		Lines:              heartbeat.PointerTo(100),
+		Project:            heartbeat.PointerTo("wakatime"),
+		Time:               1585598060.1,
+		UserAgent:          "wakatime/13.0.7",
 	}
 
 	jsonEncoded, err := json.Marshal(h)
 	require.NoError(t, err)
 
-	f, err := os.Open("./testdata/heartbeat.json")
+	f, err := os.Open("testdata/heartbeat.json")
 	require.NoError(t, err)
 
 	defer f.Close()
 
-	expected, err := ioutil.ReadAll(f)
+	expected, err := io.ReadAll(f)
 	require.NoError(t, err)
 
 	assert.JSONEq(t, string(expected), string(jsonEncoded))
@@ -150,7 +165,6 @@ func TestHeartbeat_JSON(t *testing.T) {
 
 func TestHeartbeat_JSON_NilFields(t *testing.T) {
 	h := heartbeat.Heartbeat{
-		Category:   heartbeat.CodingCategory,
 		Entity:     "/tmp/main.go",
 		EntityType: heartbeat.FileType,
 		Time:       1585598060,
@@ -160,12 +174,12 @@ func TestHeartbeat_JSON_NilFields(t *testing.T) {
 	jsonEncoded, err := json.Marshal(h)
 	require.NoError(t, err)
 
-	f, err := os.Open("./testdata/heartbeat_null_fields.json")
+	f, err := os.Open("testdata/heartbeat_null_fields.json")
 	require.NoError(t, err)
 
 	defer f.Close()
 
-	expected, err := ioutil.ReadAll(f)
+	expected, err := io.ReadAll(f)
 	require.NoError(t, err)
 
 	assert.JSONEq(t, string(expected), string(jsonEncoded))
@@ -173,21 +187,21 @@ func TestHeartbeat_JSON_NilFields(t *testing.T) {
 
 func TestNewHandle(t *testing.T) {
 	sender := mockSender{
-		SendHeartbeatsFn: func(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+		SendHeartbeatsFn: func(_ context.Context, hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
 			assert.Equal(t, []heartbeat.Heartbeat{
 				{
-					Branch:     heartbeat.String("test"),
-					Category:   heartbeat.CodingCategory,
+					Branch:     heartbeat.PointerTo("test"),
 					Entity:     "/tmp/main.go",
 					EntityType: heartbeat.FileType,
 					Time:       1585598060,
 					UserAgent:  "wakatime/13.0.7",
 				},
 			}, hh)
+
 			return []heartbeat.Result{
 				{
-					Status:    201,
-					Heartbeat: heartbeat.Heartbeat{},
+					Status: 201,
+					ID:     "D45A3607-CCC6-450E-AC05-7B73E5CC9023",
 				},
 			}, nil
 		},
@@ -195,20 +209,19 @@ func TestNewHandle(t *testing.T) {
 
 	opts := []heartbeat.HandleOption{
 		func(next heartbeat.Handle) heartbeat.Handle {
-			return func(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+			return func(ctx context.Context, hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
 				for i := range hh {
-					hh[i].Branch = heartbeat.String("test")
+					hh[i].Branch = heartbeat.PointerTo("test")
 				}
 
-				return next(hh)
+				return next(ctx, hh)
 			}
 		},
 	}
 
 	handle := heartbeat.NewHandle(&sender, opts...)
-	_, err := handle([]heartbeat.Heartbeat{
+	_, err := handle(t.Context(), []heartbeat.Heartbeat{
 		{
-			Category:   heartbeat.CodingCategory,
 			Entity:     "/tmp/main.go",
 			EntityType: heartbeat.FileType,
 			Time:       1585598060,
@@ -219,7 +232,9 @@ func TestNewHandle(t *testing.T) {
 }
 
 func TestUserAgentUnknownPlugin(t *testing.T) {
-	info := goInfo.GetInfo()
+	info, err := goInfo.GetInfo()
+	require.NoError(t, err)
+
 	expected := fmt.Sprintf(
 		"wakatime/%s (%s-%s-%s) %s Unknown/0",
 		version.Version,
@@ -229,11 +244,13 @@ func TestUserAgentUnknownPlugin(t *testing.T) {
 		runtime.Version(),
 	)
 
-	assert.Equal(t, expected, heartbeat.UserAgentUnknownPlugin())
+	assert.Equal(t, expected, heartbeat.UserAgent(t.Context(), ""))
 }
 
 func TestUserAgent(t *testing.T) {
-	info := goInfo.GetInfo()
+	info, err := goInfo.GetInfo()
+	require.NoError(t, err)
+
 	expected := fmt.Sprintf(
 		"wakatime/%s (%s-%s-%s) %s testplugin",
 		version.Version,
@@ -243,20 +260,83 @@ func TestUserAgent(t *testing.T) {
 		runtime.Version(),
 	)
 
-	assert.Equal(t, expected, heartbeat.UserAgent("testplugin"))
+	assert.Equal(t, expected, heartbeat.UserAgent(t.Context(), "testplugin"))
 }
 
-func TestPluginFromUserAgent(t *testing.T) {
-	userAgent := "wakatime/0.0.1 (linux-4.13.0-38-generic-x86_64) go1.15.3 testplugin/14.0.7"
-	assert.Equal(t, "testplugin", heartbeat.PluginFromUserAgent(userAgent))
+func TestUserAgentMissingPluginVersion(t *testing.T) {
+	info, err := goInfo.GetInfo()
+	require.NoError(t, err)
+
+	expected := fmt.Sprintf(
+		"wakatime/%s (%s-%s-%s) %s Claude/unknown macos-wakatime/5.28.3",
+		version.Version,
+		runtime.GOOS,
+		info.Core,
+		info.Platform,
+		runtime.Version(),
+	)
+
+	assert.Equal(
+		t,
+		expected,
+		heartbeat.UserAgent(t.Context(), "Claude/ macos-wakatime/5.28.3"),
+	)
+}
+
+func TestRemoteAddressRegex(t *testing.T) {
+	tests := map[string]struct {
+		Heartbeat heartbeat.Heartbeat
+		Expected  bool
+	}{
+		"ssh full path": {
+			Heartbeat: heartbeat.Heartbeat{Entity: "ssh://user:1234@192.168.1.2/home/pi/unicorn-hat/examples/ascii_pic.py"},
+			Expected:  true,
+		},
+		"sftp full path": {
+			Heartbeat: heartbeat.Heartbeat{Entity: "sftp://user:1234@192.168.1.2/home/pi/unicorn-hat/examples/ascii_pic.py"},
+			Expected:  true,
+		},
+		"without path": {
+			Heartbeat: heartbeat.Heartbeat{Entity: "ssh://user:1234@192.168.1.2"},
+			Expected:  true,
+		},
+		"invalid ftp": {
+			Heartbeat: heartbeat.Heartbeat{Entity: "ftp://user:1234@192.168.1.2"},
+			Expected:  false,
+		},
+		"invalid": {
+			Heartbeat: heartbeat.Heartbeat{Entity: "http://192.168.1.2"},
+			Expected:  false,
+		},
+		"non-file": {
+			Heartbeat: heartbeat.Heartbeat{Entity: "ssh://user@192.168.1.2/main.go", EntityType: heartbeat.AppType},
+			Expected:  false,
+		},
+		"unsaved file": {
+			Heartbeat: heartbeat.Heartbeat{
+				Entity:          "ssh://user@192.168.1.2/main.go",
+				EntityType:      heartbeat.FileType,
+				IsUnsavedEntity: true,
+			},
+			Expected: false,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := test.Heartbeat.IsRemote()
+
+			assert.Equal(t, test.Expected, result)
+		})
+	}
 }
 
 type mockSender struct {
-	SendHeartbeatsFn        func(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error)
+	SendHeartbeatsFn        func(context.Context, []heartbeat.Heartbeat) ([]heartbeat.Result, error)
 	SendHeartbeatsFnInvoked bool
 }
 
-func (m *mockSender) SendHeartbeats(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+func (m *mockSender) SendHeartbeats(ctx context.Context, hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
 	m.SendHeartbeatsFnInvoked = true
-	return m.SendHeartbeatsFn(hh)
+	return m.SendHeartbeatsFn(ctx, hh)
 }

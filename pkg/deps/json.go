@@ -1,17 +1,19 @@
 package deps
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/lexers/j"
+	"github.com/wakatime/wakatime-cli/pkg/file"
+	"github.com/wakatime/wakatime-cli/pkg/heartbeat"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 )
 
-// nolint: gochecknoglobals
+// nolint:gochecknoglobals
 var filesJSON = map[string]struct {
 	exact      bool
 	dependency string
@@ -40,13 +42,11 @@ type ParserJSON struct {
 }
 
 // Parse parses dependencies from JSON file content using the chroma JSON lexer.
-func (p *ParserJSON) Parse(filepath string) ([]string, error) {
-	reader, err := os.Open(filepath)
+func (p *ParserJSON) Parse(ctx context.Context, filepath string) ([]string, error) {
+	head, err := file.ReadHead(ctx, filepath, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %s", filepath, err)
+		return nil, fmt.Errorf("failed to read: %s", err)
 	}
-
-	defer reader.Close()
 
 	p.init()
 	defer p.init()
@@ -54,12 +54,12 @@ func (p *ParserJSON) Parse(filepath string) ([]string, error) {
 	// detect dependencies via filename
 	p.processFilename(filepath)
 
-	data, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read from reader: %s", err)
+	l := lexers.Get(heartbeat.LanguageJSON.String())
+	if l == nil {
+		return nil, fmt.Errorf("failed to get lexer for %s", heartbeat.LanguageJSON.String())
 	}
 
-	iter, err := j.JSON.Tokenise(nil, string(data))
+	iter, err := l.Tokenise(nil, string(head))
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize file content: %s", err)
 	}

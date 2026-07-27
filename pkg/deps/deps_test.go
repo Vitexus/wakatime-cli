@@ -1,6 +1,7 @@
 package deps_test
 
 import (
+	"context"
 	"regexp"
 	"testing"
 
@@ -15,7 +16,7 @@ import (
 func TestWithDetection(t *testing.T) {
 	opt := deps.WithDetection(deps.Config{})
 
-	h := opt(func(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+	h := opt(func(_ context.Context, hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
 		assert.Equal(t, []heartbeat.Heartbeat{
 			{
 				Dependencies: []string{
@@ -24,7 +25,7 @@ func TestWithDetection(t *testing.T) {
 				},
 				Entity:     "testdata/golang_minimal.go",
 				EntityType: heartbeat.FileType,
-				Language:   heartbeat.String("Go"),
+				Language:   heartbeat.PointerTo("Go"),
 			},
 		}, hh)
 
@@ -35,10 +36,10 @@ func TestWithDetection(t *testing.T) {
 		}, nil
 	})
 
-	result, err := h([]heartbeat.Heartbeat{{
+	result, err := h(t.Context(), []heartbeat.Heartbeat{{
 		Entity:     "testdata/golang_minimal.go",
 		EntityType: heartbeat.FileType,
-		Language:   heartbeat.String("Go"),
+		Language:   heartbeat.PointerTo("Go"),
 	}})
 	require.NoError(t, err)
 
@@ -51,10 +52,10 @@ func TestWithDetection(t *testing.T) {
 
 func TestWithDetection_SkipSanitized(t *testing.T) {
 	opt := deps.WithDetection(deps.Config{
-		FilePatterns: []regex.Regex{regexp.MustCompile(".*")},
+		FilePatterns: []regex.Regex{regex.NewRegexpWrap(regexp.MustCompile(".*"))},
 	})
 
-	h := opt(func(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+	h := opt(func(_ context.Context, hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
 		assert.Len(t, hh[0].Dependencies, 0)
 
 		return []heartbeat.Result{
@@ -64,10 +65,10 @@ func TestWithDetection_SkipSanitized(t *testing.T) {
 		}, nil
 	})
 
-	result, err := h([]heartbeat.Heartbeat{{
+	result, err := h(t.Context(), []heartbeat.Heartbeat{{
 		Entity:     "testdata/golang.go",
 		EntityType: heartbeat.FileType,
-		Language:   heartbeat.String("Go"),
+		Language:   heartbeat.PointerTo("Go"),
 	}})
 	require.NoError(t, err)
 
@@ -81,7 +82,7 @@ func TestWithDetection_SkipSanitized(t *testing.T) {
 func TestWithDetection_LocalFile(t *testing.T) {
 	opt := deps.WithDetection(deps.Config{})
 
-	h := opt(func(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+	h := opt(func(_ context.Context, hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
 		assert.Equal(t, []heartbeat.Heartbeat{
 			{
 				Dependencies: []string{
@@ -90,7 +91,7 @@ func TestWithDetection_LocalFile(t *testing.T) {
 				},
 				Entity:     "testdata/golang.go",
 				EntityType: heartbeat.FileType,
-				Language:   heartbeat.String("Go"),
+				Language:   heartbeat.PointerTo("Go"),
 				LocalFile:  "testdata/golang_minimal.go",
 			},
 		}, hh)
@@ -102,10 +103,10 @@ func TestWithDetection_LocalFile(t *testing.T) {
 		}, nil
 	})
 
-	result, err := h([]heartbeat.Heartbeat{{
+	result, err := h(t.Context(), []heartbeat.Heartbeat{{
 		Entity:     "testdata/golang.go",
 		EntityType: heartbeat.FileType,
-		Language:   heartbeat.String("Go"),
+		Language:   heartbeat.PointerTo("Go"),
 		LocalFile:  "testdata/golang_minimal.go",
 	}})
 	require.NoError(t, err)
@@ -120,10 +121,10 @@ func TestWithDetection_LocalFile(t *testing.T) {
 func TestWithDetection_NonFileType(t *testing.T) {
 	opt := deps.WithDetection(deps.Config{})
 
-	h := opt(func(hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+	h := opt(func(_ context.Context, hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
 		assert.Equal(t, []heartbeat.Heartbeat{
 			{
-				Entity:     "testdata/codefiles/golang.go",
+				Entity:     "testdata/golang.go",
 				EntityType: heartbeat.AppType,
 			},
 		}, hh)
@@ -135,8 +136,8 @@ func TestWithDetection_NonFileType(t *testing.T) {
 		}, nil
 	})
 
-	result, err := h([]heartbeat.Heartbeat{{
-		Entity:     "testdata/codefiles/golang.go",
+	result, err := h(t.Context(), []heartbeat.Heartbeat{{
+		Entity:     "testdata/golang.go",
 		EntityType: heartbeat.AppType,
 	}})
 	require.NoError(t, err)
@@ -148,7 +149,56 @@ func TestWithDetection_NonFileType(t *testing.T) {
 	}, result)
 }
 
+func TestWithDetection_SkipsUnsupportedHeartbeats(t *testing.T) {
+	opt := deps.WithDetection(deps.Config{})
+
+	h := opt(func(_ context.Context, hh []heartbeat.Heartbeat) ([]heartbeat.Result, error) {
+		assert.Equal(t, []heartbeat.Heartbeat{
+			{
+				Entity:          "testdata/golang.go",
+				EntityType:      heartbeat.FileType,
+				IsUnsavedEntity: true,
+				Language:        heartbeat.PointerTo("Go"),
+			},
+			{
+				Entity:     "testdata/golang.go",
+				EntityType: heartbeat.FileType,
+			},
+			{
+				Entity:     "testdata/golang.go",
+				EntityType: heartbeat.FileType,
+				Language:   heartbeat.PointerTo("NotALanguage"),
+			},
+		}, hh)
+
+		return []heartbeat.Result{{Status: 201}}, nil
+	})
+
+	result, err := h(t.Context(), []heartbeat.Heartbeat{
+		{
+			Entity:          "testdata/golang.go",
+			EntityType:      heartbeat.FileType,
+			IsUnsavedEntity: true,
+			Language:        heartbeat.PointerTo("Go"),
+		},
+		{
+			Entity:     "testdata/golang.go",
+			EntityType: heartbeat.FileType,
+		},
+		{
+			Entity:     "testdata/golang.go",
+			EntityType: heartbeat.FileType,
+			Language:   heartbeat.PointerTo("NotALanguage"),
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []heartbeat.Result{{Status: 201}}, result)
+}
+
 func TestDetect(t *testing.T) {
+	ctx := t.Context()
+
 	tests := map[string]struct {
 		Filepath     string
 		Language     heartbeat.Language
@@ -162,7 +212,7 @@ func TestDetect(t *testing.T) {
 		"cpp": {
 			Filepath:     "testdata/cpp_minimal.cpp",
 			Language:     heartbeat.LanguageCPP,
-			Dependencies: []string{"iostream"},
+			Dependencies: []string{"wakatime"},
 		},
 		"csharp": {
 			Filepath:     "testdata/csharp_minimal.cs",
@@ -266,7 +316,7 @@ func TestDetect(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			deps, err := deps.Detect(test.Filepath, test.Language)
+			deps, err := deps.Detect(ctx, test.Filepath, test.Language)
 			require.NoError(t, err)
 
 			assert.Equal(t, test.Dependencies, deps)
@@ -276,6 +326,7 @@ func TestDetect(t *testing.T) {
 
 func TestDetect_DuplicatesRemoved(t *testing.T) {
 	deps, err := deps.Detect(
+		t.Context(),
 		"testdata/golang_duplicate.go",
 		heartbeat.LanguageGo,
 	)
@@ -288,6 +339,7 @@ func TestDetect_DuplicatesRemoved(t *testing.T) {
 
 func TestDetect_LongDependenciesRemoved(t *testing.T) {
 	deps, err := deps.Detect(
+		t.Context(),
 		"testdata/python_with_long_import.py",
 		heartbeat.LanguagePython,
 	)
@@ -296,13 +348,14 @@ func TestDetect_LongDependenciesRemoved(t *testing.T) {
 	assert.Equal(t, []string{
 		"django",
 		"flask",
-		// nolint:lll
+		// nolint:revive
 		"notlongenoughnotlongenoughnotlongenoughnotlongenoughnotlongenoughnotlongenoughnotlongenoughnotlongenoughnotlongenoughnotlongenoughnotlongenoughnotlongenoughnotlongenoughnotlongenoughnotlongenoughnotlo",
 	}, deps)
 }
 
 func TestDetect_MaxDependenciesCountReached(t *testing.T) {
 	deps, err := deps.Detect(
+		t.Context(),
 		"testdata/python_with_many_imports.py",
 		heartbeat.LanguagePython,
 	)
@@ -313,6 +366,7 @@ func TestDetect_MaxDependenciesCountReached(t *testing.T) {
 
 func TestDetect_EmptyDependenciesRemoved(t *testing.T) {
 	deps, err := deps.Detect(
+		t.Context(),
 		"testdata/bower_empty_dependency.json",
 		heartbeat.LanguageJSON,
 	)

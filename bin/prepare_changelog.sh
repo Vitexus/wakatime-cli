@@ -8,8 +8,8 @@ if [[ $# -ne 2 ]]; then
 fi
 
 # Read arguments
-branch=$1
-changelog=$2
+branch=$(echo "$1" | tr -d \")
+changelog=$(echo "$2" | tr -d \")
 slack=
 
 clean_up() {
@@ -22,6 +22,12 @@ replace_for_release() {
     changelog="${changelog//'%'/'%25'}"
     changelog="${changelog//$'\n'/'%0A'}"
     changelog="${changelog//$'\r'/'%0D'}"
+}
+
+replace_for_slack() {
+    slack="${slack//'%'/'%25'}"
+    slack="${slack//$'\n'/'%0A'}"
+    slack="${slack//$'\r'/'%0D'}"
 }
 
 slack_output_for_develop() {
@@ -55,7 +61,7 @@ parse_for_release() {
 }
 
 case $branch in
-    develop) 
+    develop)
         parse_for_develop
         clean_up
         slack_output_for_develop
@@ -67,6 +73,7 @@ case $branch in
         clean_up
         slack_output_for_release
         replace_for_release
+        replace_for_slack
         ;;
     *) exit 1 ;;
 esac
