@@ -1,12 +1,36 @@
 #!/usr/bin/make -f
 
-override_dh_auto_install:
-	dh_auto_install -- --no-source
+export DH_VERBOSE = 1
+export GOCACHE := $(CURDIR)/debian/.gocache
+export GO111MODULE := on
+export GOFLAGS := -mod=mod
+
+REPO        := github.com/wakatime/wakatime-cli
+PKG_VERSION := $(shell dpkg-parsechangelog -S Version | sed 's/[+~].*//')
+COMMIT      := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILDDATE   := $(shell date -u '+%Y-%m-%dT%H:%M:%S %Z')
+
+LD_FLAGS := -s -w \
+	-X '$(REPO)/pkg/version.BuildDate=$(BUILDDATE)' \
+	-X '$(REPO)/pkg/version.Commit=$(COMMIT)' \
+	-X '$(REPO)/pkg/version.Version=$(PKG_VERSION)' \
+	-X '$(REPO)/pkg/version.OS=linux'
 
 %:
-	dh $@ # --buildsystem=golang --with=golang
+	dh $@
 
+override_dh_auto_build:
+	go build -v -ldflags "$(LD_FLAGS)" -o wakatime-cli .
 
-override_dh_build:
-	go build
+override_dh_auto_test:
+	appstreamcli validate --pedantic --no-net debian/com.github.wakatime.wakatime-cli.metainfo.xml
 
+override_dh_auto_install:
+	help2man --no-discard-stderr --no-info \
+		--name="Command line interface used by all WakaTime text editor plugins" \
+		--version-string="$(PKG_VERSION)" \
+		./wakatime-cli \
+		-o debian/wakatime-cli.1
+
+override_dh_installman:
+	dh_installman debian/wakatime-cli.1

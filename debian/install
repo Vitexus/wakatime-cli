@@ -1,1 +1,3 @@
 wakatime-cli usr/bin
+debian/wakatime-cli.svg usr/share/icons/hicolor/scalable/apps
+debian/com.github.wakatime.wakatime-cli.metainfo.xml usr/share/metainfo

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="console-application">
+  <id>com.github.wakatime.wakatime-cli</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>BSD-3-Clause</project_license>
+  <name>WakaTime CLI</name>
+  <summary>Command line interface used by all WakaTime text editor plugins</summary>
+  <description>
+    <p>
+      WakaTime CLI collects and sends code activity metrics (time spent, files
+      edited, languages used) from text editors and IDEs to the WakaTime API.
+    </p>
+    <p>
+      It is not normally invoked directly; instead it is called by one of the
+      WakaTime plugins available for popular text editors and IDEs.
+    </p>
+  </description>
+  <icon type="stock">wakatime-cli</icon>
+  <provides>
+    <binary>wakatime-cli</binary>
+  </provides>
+  <url type="homepage">https://wakatime.com</url>
+  <url type="bugtracker">https://github.com/wakatime/wakatime-cli/issues</url>
+  <developer id="com.wakatime">
+    <name>WakaTime</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+</component>

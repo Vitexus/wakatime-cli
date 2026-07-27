@@ -2,20 +2,19 @@ Source: wakatime-cli
 Section: devel
 Priority: optional
 Maintainer: Debian Go Packaging Team <team+pkg-go@tracker.debian.org>
-Uploaders: CyberVitexus <vitex@exiv.brevnov.czf>
-Build-Depends: debhelper (>= 11),
-               dh-golang,
+Uploaders: CyberVitexus <vitex@exiv.brevnov.cz>
+Build-Depends: debhelper-compat (= 13),
                golang-any,
-Standards-Version: 4.2.1
+               appstream,
+               help2man,
+Standards-Version: 4.6.2
 Homepage: https://github.com/wakatime/wakatime-cli
 Vcs-Browser: https://github.com/wakatime/wakatime-cli
 Vcs-Git: https://github.com/wakatime/wakatime-cli.git
-XS-Go-Import-Path: github.com/wakatime/wakatime-cli
-Testsuite: autopkgtest-pkg-go
+Rules-Requires-Root: no
 
 Package: wakatime-cli
 Architecture: any
-Built-Using: ${misc:Built-Using}
 Depends: ${misc:Depends},
          ${shlibs:Depends}
 Description: Command line interface used by all WakaTime text editor plugins

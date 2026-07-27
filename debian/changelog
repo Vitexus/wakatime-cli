@@ -1,5 +1,20 @@
+wakatime-cli (0.6.1~git20260727) UNRELEASED; urgency=medium
+
+  * Modernize packaging to debhelper-compat 13.
+  * Fix build: build against go modules directly with proper -ldflags
+    (version/commit/build-date were previously not injected and the
+    build target didn't match debian/install's expected binary path).
+  * Add AppStream metainfo (debian/com.github.wakatime.wakatime-cli.metainfo.xml)
+    with hicolor scalable icon, validated with appstreamcli --pedantic.
+  * Generate and install a man page via help2man.
+  * Add debian/source/format (3.0 (quilt)); drop debian/compat in
+    favor of debhelper-compat.
+  * Bump Standards-Version to 4.6.2; add Rules-Requires-Root: no.
+
+ -- CyberVitexus <vitex@exiv.brevnov.cz>  Mon, 27 Jul 2026 12:00:00 +0200
+
 wakatime-cli (0.6.1) UNRELEASED; urgency=medium
 
-  * Initial release. 
+  * Initial release.
 
  -- CyberVitexus <vitex@exiv.jinonice.czf>  Fri, 21 May 2021 10:35:47 +0200

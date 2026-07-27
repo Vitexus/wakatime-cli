@@ -5,6 +5,9 @@
 *.so
 *.dylib
 build/
+/wakatime-cli
+debian/wakatime-cli.1
+debian/.gocache/
 
 .idea/
 
